@@ -645,6 +645,7 @@
       .paxBlock .row3{grid-template-columns:minmax(0,1fr)}
     }
   </style>
+<link rel="stylesheet" href="../shared/nav.css" /><!-- consolidacao:inject -->
 </head>
 <body>
 <header class="topbar">
@@ -4271,5 +4272,6 @@ if(restoredDraft){
 // em ambiente sem fetch (jsdom nos testes) simplesmente nao faz nada.
 maybeAutofillFx().catch(() => {});
 </script>
+<script src="../shared/nav.js"></script><!-- consolidacao:inject -->
 </body>
 </html>

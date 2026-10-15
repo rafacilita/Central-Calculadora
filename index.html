@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Apoio à Consolidação – RexturAdvance</title>
   <link rel="icon" href="icone.jpg" />
+  <link rel="stylesheet" href="shared/nav.css" />
   <style>
     /* Tokens lidos do app de cotacao, para o menu e as duas ferramentas lerem
        como o mesmo produto. Tema apenas por prefers-color-scheme: os dois apps
@@ -47,7 +48,10 @@
     *{box-sizing:border-box}
     body{
       margin:0;
-      padding:0 16px 48px;
+      /* Sem padding horizontal no body: a nav compartilhada e full-bleed, igual
+         nos dois apps (que tambem usam body{margin:0} sem padding). O recuo do
+         conteudo fica nos containers. */
+      padding:0 0 48px;
       background:var(--canvas);
       color:var(--ink);
       font-family:var(--sans);
@@ -55,29 +59,14 @@
       line-height:1.5;
     }
 
-    .topbar{
-      margin:0 -16px 24px;
-      padding:18px 20px;
-      background:var(--brand);
-      color:#fff;
-    }
-    .topbarInner{max-width:880px; margin:0 auto; display:flex; align-items:center; gap:14px}
-    .logoBox{
-      flex:0 0 auto;
-      height:40px; width:40px;
-      display:flex; align-items:center; justify-content:center;
-      background:#fff;
-      border-radius:var(--radius-sm);
-      overflow:hidden;
-    }
-    .logoBox img{max-height:34px; max-width:34px; display:block}
-    .topbar h1{margin:0; font-size:16px; font-weight:600; letter-spacing:.01em}
-    .topbar p{margin:2px 0 0; font-size:12px; color:rgba(255,255,255,.78)}
+    /* A barra navy e o filete da marca vem da nav compartilhada (shared/nav.css),
+       a mesma que aparece dentro das duas ferramentas. Aqui o cabecalho e so
+       texto, para nao empilhar duas faixas navy. */
+    .pageHead{max-width:880px; margin:0 auto; padding:26px 16px 22px}
+    .pageHead h1{margin:0; font-size:19px; font-weight:600; letter-spacing:.01em}
+    .pageHead p{margin:4px 0 0; color:var(--ink-2); font-size:13px}
 
-    .brandRule{display:flex; margin:0 -16px 28px; height:3px}
-    .brandRule span{flex:1 1 25%}
-
-    main{max-width:880px; margin:0 auto}
+    main{max-width:880px; margin:0 auto; padding:0 16px}
 
     .cards{
       display:grid;
@@ -142,22 +131,10 @@
 </head>
 <body>
 
-<header class="topbar">
-  <div class="topbarInner">
-    <div class="logoBox"><img src="icone.jpg" alt="RexturAdvance" /></div>
-    <div>
-      <h1>Apoio à Consolidação</h1>
-      <p>Ferramentas de cálculo para o atendimento</p>
-    </div>
-  </div>
+<header class="pageHead">
+  <h1>Apoio à Consolidação</h1>
+  <p>Ferramentas de cálculo para o atendimento.</p>
 </header>
-
-<div class="brandRule">
-  <span style="background:#ed458f"></span>
-  <span style="background:#8c4593"></span>
-  <span style="background:#04a8db"></span>
-  <span style="background:#f2a75e"></span>
-</div>
 
 <main>
   <div class="cards">
@@ -201,5 +178,6 @@
   </footer>
 </main>
 
+<script src="shared/nav.js"></script>
 </body>
 </html>

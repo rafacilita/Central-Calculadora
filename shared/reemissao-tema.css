@@ -1,0 +1,105 @@
+/* Alinha a paleta da Calculadora de Reemissao a da Calculadora de Cotacao.
+   Injetado na copia pelo sync.sh -- o codigo do app nao e alterado.
+
+   Como funciona: o app ja e dirigido por variaveis CSS (20 tokens de tema,
+   82 usos de var()). Aqui so repontamos esses tokens; nenhuma regra estrutural
+   (layout, grid, espacamento, estado) e tocada.
+
+   O QUE DE PROPOSITO NAO MUDA:
+   - As cores do e-mail da agencia, da observacao do RF e do formulario SICA.
+     Elas sao geradas no JavaScript (139 dos 186 hex fixos do arquivo estao
+     depois do </style>) e sao o documento que vai para fora -- nao sao
+     interface, e nao devem seguir o tema da ferramenta.
+   - Os acentos de secao --calc (ciano), --rent (verde) e --cco (roxo), e os
+     filetes das classes .calcCard/.outputsCard. Sao a diferenciacao pedida:
+     as duas ferramentas lendo como o mesmo produto, sem ficarem identicas.
+
+   Especificidade: usamos [data-theme="..."] (0,2,0) em vez de :root solto
+   (0,1,0) porque o bloco :root do app define a paleta escura; com o atributo
+   ganhamos dele por especificidade, nao por ordem de arquivo. */
+
+/* ── Tema claro ────────────────────────────────────────────────────────────
+   Equivale a :root da cotacao (canvas/surface/ink/line/accent navy). */
+:root[data-theme="light"]{
+  --bg:#eef1f5;
+  --card:#ffffff;
+  --text:#1a2433;
+  --muted:#5a6a7d;
+  --line:#d7dee7;
+  --accent:#002554;
+  --accent-rgb:0,37,84;
+  --input-bg:#ffffff;
+  --input-border:#bcc7d4;
+  --input-text:#1a2433;
+  --chip-bg:#f7f9fb;
+  --chip-border:#bcc7d4;
+  --shadow:0 1px 2px rgba(16,24,40,.05);
+  --radius:8px;
+}
+
+/* ── Tema escuro ───────────────────────────────────────────────────────────
+   Equivale a body[data-theme="dark"] da cotacao. O navy puro nao tem contraste
+   suficiente sobre fundo escuro, entao o acento usa o mesmo degrau mais claro
+   da marca que a cotacao usa (#2d6cb0). */
+:root[data-theme="dark"]{
+  --bg:#13171f;
+  --card:#1b212b;
+  --text:#e7edf4;
+  --muted:#97a4b5;
+  --line:#2b3440;
+  --accent:#2d6cb0;
+  --accent-rgb:45,108,176;
+  --shadow:0 1px 2px rgba(0,0,0,.2);
+  --radius:8px;
+}
+
+/* ── Fundo chapado ─────────────────────────────────────────────────────────
+   A cotacao e deliberadamente sem gradiente ("e uma ferramenta operacional de
+   uso repetitivo, nao uma vitrine", comentario no topo do CSS dela). O app de
+   reemissao pinta dois radial-gradient no body; aqui ficam chapados nos dois
+   temas. */
+:root[data-theme="light"] body,
+:root[data-theme="dark"] body{
+  background:var(--bg);
+  color:var(--text);
+}
+
+/* ── Cartoes ───────────────────────────────────────────────────────────────
+   Troca o gradiente sutil + sombra difusa pela superficie chapada com borda
+   de 1px da cotacao. */
+:root[data-theme="light"] .card,
+:root[data-theme="dark"] .card{
+  background:var(--card);
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
+}
+
+/* ── Campos ────────────────────────────────────────────────────────────────
+   O app pinta input/select/textarea com rgba sobre o fundo; a cotacao usa
+   superficie opaca com borda solida. */
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea,
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea{
+  background:var(--input-bg, var(--card));
+  border:1px solid var(--input-border, var(--line));
+  color:var(--input-text, var(--text));
+  border-radius:4px;
+}
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea{
+  --input-bg:#161b24;
+  --input-border:#3c4856;
+  --input-text:#e7edf4;
+}
+
+/* Raio dos controles alinhado ao da cotacao (--radius-sm:4px). */
+:root[data-theme="light"] .codebox,
+:root[data-theme="dark"] .codebox,
+:root[data-theme="light"] .preview,
+:root[data-theme="dark"] .preview{
+  border-radius:4px;
+}
