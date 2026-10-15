@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Apoio à Consolidação – RexturAdvance</title>
+  <link rel="icon" href="icone.jpg" />
+  <style>
+    /* Tokens lidos do app de cotacao, para o menu e as duas ferramentas lerem
+       como o mesmo produto. Tema apenas por prefers-color-scheme: os dois apps
+       tem sistemas de tema incompativeis entre si (um usa body[data-theme] +
+       cotacao_theme_v2, o outro documentElement.dataset.theme + ra_calc_theme,
+       com default escuro), entao nenhum seletor aqui seria verdadeiro para os
+       dois -- e escrever a chave de um deles mudaria o estado do app. */
+    :root{
+      --canvas:#eef1f5;
+      --surface:#ffffff;
+      --surface-2:#f7f9fb;
+      --ink:#1a2433;
+      --ink-2:#5a6a7d;
+      --line:#d7dee7;
+      --line-strong:#bcc7d4;
+      --brand:#002554;
+      --accent:#002554;
+      --accent-ink:#ffffff;
+      --focus:rgba(0,37,84,.18);
+      --radius:8px;
+      --radius-sm:4px;
+      --shadow:0 1px 2px rgba(16,24,40,.05);
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --canvas:#13171f;
+        --surface:#1b212b;
+        --surface-2:#161b24;
+        --ink:#e7edf4;
+        --ink-2:#97a4b5;
+        --line:#2b3440;
+        --line-strong:#3c4856;
+        --accent:#2d6cb0;
+        --focus:rgba(45,108,176,.26);
+        --shadow:0 1px 2px rgba(0,0,0,.2);
+      }
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      padding:0 16px 48px;
+      background:var(--canvas);
+      color:var(--ink);
+      font-family:var(--sans);
+      font-size:14px;
+      line-height:1.5;
+    }
+
+    .topbar{
+      margin:0 -16px 24px;
+      padding:18px 20px;
+      background:var(--brand);
+      color:#fff;
+    }
+    .topbarInner{max-width:880px; margin:0 auto; display:flex; align-items:center; gap:14px}
+    .logoBox{
+      flex:0 0 auto;
+      height:40px; width:40px;
+      display:flex; align-items:center; justify-content:center;
+      background:#fff;
+      border-radius:var(--radius-sm);
+      overflow:hidden;
+    }
+    .logoBox img{max-height:34px; max-width:34px; display:block}
+    .topbar h1{margin:0; font-size:16px; font-weight:600; letter-spacing:.01em}
+    .topbar p{margin:2px 0 0; font-size:12px; color:rgba(255,255,255,.78)}
+
+    .brandRule{display:flex; margin:0 -16px 28px; height:3px}
+    .brandRule span{flex:1 1 25%}
+
+    main{max-width:880px; margin:0 auto}
+
+    .cards{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
+      gap:16px;
+    }
+
+    .card{
+      display:flex;
+      flex-direction:column;
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      text-decoration:none;
+      color:inherit;
+      transition:border-color .12s ease, box-shadow .12s ease;
+    }
+    .card:hover{
+      border-color:var(--line-strong);
+      box-shadow:0 2px 8px rgba(16,24,40,.09);
+    }
+    .card:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+    .cardRule{display:flex; height:4px}
+    .cardRule span{flex:1 1 25%}
+    .cardBody{padding:18px 18px 20px; display:flex; flex-direction:column; flex:1}
+    .card h2{margin:0 0 2px; font-size:15px; font-weight:600}
+    .cardTag{
+      display:inline-block;
+      align-self:flex-start;
+      margin:0 0 10px;
+      padding:2px 8px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:var(--surface-2);
+      color:var(--ink-2);
+      font-size:11px;
+      font-weight:600;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .card p{margin:0; color:var(--ink-2); font-size:13px}
+    .cardWhen{margin-top:10px !important; font-size:12px}
+    .cardWhen b{color:var(--ink); font-weight:600}
+    .cardGo{
+      margin-top:16px;
+      color:var(--accent);
+      font-size:13px;
+      font-weight:600;
+    }
+
+    footer{
+      max-width:880px;
+      margin:28px auto 0;
+      padding-top:16px;
+      border-top:1px solid var(--line);
+      color:var(--ink-2);
+      font-size:12px;
+    }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbarInner">
+    <div class="logoBox"><img src="icone.jpg" alt="RexturAdvance" /></div>
+    <div>
+      <h1>Apoio à Consolidação</h1>
+      <p>Ferramentas de cálculo para o atendimento</p>
+    </div>
+  </div>
+</header>
+
+<div class="brandRule">
+  <span style="background:#ed458f"></span>
+  <span style="background:#8c4593"></span>
+  <span style="background:#04a8db"></span>
+  <span style="background:#f2a75e"></span>
+</div>
+
+<main>
+  <div class="cards">
+
+    <a class="card" href="./cotacao/">
+      <div class="cardRule">
+        <span style="background:#ed458f"></span>
+        <span style="background:#8c4593"></span>
+        <span style="background:#04a8db"></span>
+        <span style="background:#f2a75e"></span>
+      </div>
+      <div class="cardBody">
+        <span class="cardTag">Nova emissão</span>
+        <h2>Calculadora de Cotação INTER</h2>
+        <p>Lê o itinerário e as máscaras do GDS (Amadeus ou Sabre), revisa os valores e monta o e-mail pronto para a agência.</p>
+        <p class="cardWhen"><b>Use quando:</b> a agência pede cotação de uma emissão nova.</p>
+        <div class="cardGo">Abrir &rarr;</div>
+      </div>
+    </a>
+
+    <a class="card" href="./reemissao/">
+      <div class="cardRule">
+        <span style="background:#ed458f"></span>
+        <span style="background:#8c4593"></span>
+        <span style="background:#04a8db"></span>
+        <span style="background:#f2a75e"></span>
+      </div>
+      <div class="cardBody">
+        <span class="cardTag">Reemissão</span>
+        <h2>Calculadora de Reemissão</h2>
+        <p>Calcula a reemissão (nacional ou internacional, com leitura automática do FXO) e gera e-mail da agência, observação do RF, formulário de rentabilização e o código CRR.</p>
+        <p class="cardWhen"><b>Use quando:</b> o bilhete já existe e precisa ser remarcado.</p>
+        <div class="cardGo">Abrir &rarr;</div>
+      </div>
+    </a>
+
+  </div>
+
+  <footer>
+    Cada ferramenta abre como uma página própria e guarda o rascunho no seu navegador.
+  </footer>
+</main>
+
+</body>
+</html>

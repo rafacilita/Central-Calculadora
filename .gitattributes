@@ -1,0 +1,15 @@
+# Normalizacao de fim de linha FIXADA no repo, para nao depender do core.autocrlf
+# da maquina de quem commita.
+#
+# Por que LF no repo: o GitHub Pages serve o conteudo do BLOB, nao o do arquivo em
+# disco. Os dois repos de origem tambem armazenam LF (o core.autocrlf converte na
+# gravacao), logo LF aqui faz o Pages servir exatamente os mesmos bytes que as duas
+# URLs atuais ja servem hoje. Fixar isso deixa o resultado identico em qualquer
+# maquina, em vez de depender de config global do git.
+#
+# Fim de linha nao altera comportamento de HTML/CSS/JS -- isto e so para manter a
+# equivalencia byte a byte com a producao auditavel.
+* text=auto
+
+*.png binary
+*.jpg binary
