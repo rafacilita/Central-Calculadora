@@ -1,8 +1,8 @@
-# Apoio à Consolidação
+# Central Calculadora
 
 Ponto de entrada único para as ferramentas de cálculo do atendimento da consolidação.
 
-Publicado em **https://rafacilita.github.io/consolidacao/** (GitHub Pages, branch `main`, raiz).
+Publicado em **https://rafacilita.github.io/Central-Calculadora/** (GitHub Pages, branch `main`, raiz).
 
 ```
 index.html             → página-menu (arquivo original deste repo)

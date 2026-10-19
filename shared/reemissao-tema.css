@@ -103,3 +103,148 @@
 :root[data-theme="dark"] .preview{
   border-radius:4px;
 }
+
+/* ── Cabecalho: exatamente igual ao da cotacao ──────────────────────────────
+   Pedido do usuario: mesmo simbolo da marca, mesma fonte/tamanho, mesmas
+   cores, mesma posicao do seletor claro/escuro. Em vez de reaproximar visual,
+   aqui copiamos os valores literais que a cotacao usa em `.topbar`/`.brand`/
+   `.logoBox`/`.title`/`.pill` (index.html da cotacao). So existe 1 <header> e
+   1 <h1> no documento, e .logoMark/.titles/.topRow/.brand/.themeCtl so
+   aparecem ali -- seguro recolorir/redimensionar sem tocar em mais nada. */
+header{
+  background:var(--brand, #002554);
+  position:relative;
+  padding:12px 24px;         /* igual ao `header{padding:12px 24px}` da cotacao */
+  max-width:1600px;          /* igual ao max-width da cotacao (era 1240px aqui) */
+}
+header::after{
+  content:"";
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:3px;
+  background:linear-gradient(90deg, #ed458f 0%, #8c4593 34%, #04a8db 72%, #f2a75e 100%);
+}
+
+/* Posicao do seletor de tema: `.themeCtl` fica dentro de `.brand`, que por
+   sua vez e filho de `.topRow` (display:flex). Sem flex-grow, um item flex
+   so ocupa a largura do PROPRIO conteudo -- entao `.brand` ficava do tamanho
+   de "logo + titulo", e o `margin-left:auto` do `.themeCtl` (que o proprio
+   app ja aplica) so empurrava ele até a borda desse `.brand` encolhido, bem
+   antes da borda real da barra. Width:100% faz `.brand` ocupar a largura
+   toda de `.topRow` (que ja ocupa a largura toda do `header`), daí o
+   margin-left:auto passa a empurrar at'e a borda direita de verdade -- igual
+   ao `.pillrow` da cotacao, que fica no extremo oposto do `.brand` dela via
+   `justify-content:space-between` no `header`. */
+.brand{width:100%}
+
+/* Simbolo da marca: troca o icone proprio da reemissao pelo MESMO arquivo
+   logo-rextur.png da cotacao (243x120px, razao 2,025), na mesma altura de
+   38px que a cotacao usa em `.logoBox img`. O <img> original e so ocultado
+   (nunca removido do HTML), e a logo entra como background-image do
+   container -- nenhuma linha do app e alterada. */
+.logoMark{
+  background:transparent;
+  box-shadow:none;
+  width:77px; height:38px;        /* 38px * 2,025 de razao, arredondado */
+  background-image:url("../cotacao/logo-rextur.png");
+  background-size:contain;
+  background-repeat:no-repeat;
+  background-position:center;
+}
+.logoMark img{
+  /* display:none tiraria o <img> do fluxo de layout, mas o container ja tem
+     tamanho fixo acima; opacity:0 e mais seguro contra qualquer script do
+     app que meca o elemento. */
+  opacity:0;
+}
+
+/* Fonte e tamanho do titulo: valores literais de `.title h1` da cotacao
+   (15px/600/0/1.3), substituindo o `h1{font-size:20px;font-weight:800}` da
+   reemissao. A cor branca precisa de !important porque o proprio app ja tem
+   uma regra `[data-theme="light"] h1{color:#0f172a}` (especificidade maior
+   que `header h1` sozinho) para cobrir casos sem as classes de layout. */
+header h1{
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size:15px !important;
+  font-weight:600 !important;
+  letter-spacing:0 !important;
+  line-height:1.3 !important;
+  color:#ffffff !important;
+}
+
+/* Pilula do seletor de tema: valores literais de `.pill`/`.pill select` da
+   cotacao, nao so uma aproximacao visual -- e exatamente a mesma caixa, so
+   com dimensoes diferentes antes. O app ja neutraliza o visual de pilula de
+   proposito ("Theme control: basic") com !important, inclusive numa variante
+   so pra tema claro com seletor `:root[data-theme="light"] .themeCtl select`
+   (mais especifica que `.themeCtl select` sozinho) -- por isso as regras
+   abaixo repetem esse MESMO prefixo de atributo (pros dois temas) com
+   !important, pra ganhar por especificidade igual + ordem no arquivo, nao so
+   por !important. */
+.themeCtl{
+  display:flex !important;
+  align-items:center !important;
+  min-height:32px !important;
+  padding:4px 10px !important;
+  gap:8px !important;
+  border:1px solid rgba(255,255,255,.20) !important;
+  border-radius:4px !important;
+  background:rgba(255,255,255,.10) !important;
+  /* a reemissao usa um empilhamento de fontes diferente do da cotacao
+     (--sans comeca em "ui-sans-serif", a da cotacao em "system-ui") -- o
+     texto "Tema"/"Claro"/"Escuro" acabava com fonte sutilmente diferente.
+     Fixa a MESMA pilha aqui, aplicada por heranca ao label e ao select. */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+.themeCtl label{
+  color:rgba(255,255,255,.78) !important;
+  font-size:12px !important;
+  font-weight:400 !important;
+  /* a reemissao tem uma regra global `label{margin:0 0 6px}` (pensada pra
+     label ficar ACIMA do campo, em formulario normal); aqui label e select
+     estao lado a lado no mesmo flex row, e essa margem embaixo empurrava o
+     texto "Tema" pra cima dentro da pilula. A cotacao nao tem regra global
+     de label, entao nunca precisou disso. */
+  margin:0 !important;
+}
+:root[data-theme="light"] .themeCtl select,
+:root[data-theme="dark"] .themeCtl select{
+  /* seta propria, igual ao `select{}` global da cotacao -- a cotacao so
+     consegue usar essa seta porque desliga a nativa com appearance:none;
+     a reemissao tinha "appearance:auto" de proposito, que repoe a seta do
+     SO e precisa ser desfeito aqui tambem. */
+  appearance:none !important;
+  -webkit-appearance:none !important;
+  -moz-appearance:none !important;
+  background-image:
+    linear-gradient(45deg,transparent 50%,currentColor 50%),
+    linear-gradient(135deg,currentColor 50%,transparent 50%) !important;
+  background-position:calc(100% - 15px) calc(50% + 1px), calc(100% - 10px) calc(50% + 1px) !important;
+  background-size:5px 5px, 5px 5px !important;
+  background-repeat:no-repeat !important;
+
+  width:auto !important;
+  min-width:92px !important;
+  min-height:26px !important;
+  padding:2px 6px !important;
+  border:1px solid transparent !important;
+  border-radius:4px !important;
+  /* reafirmado aqui (nao so no .themeCtl pai) porque a lista nativa do
+     <select>, em alguns navegadores, ignora fonte herdada e usa a do SO
+     se nao estiver no proprio elemento. */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size:12px !important;
+  font-weight:400 !important;
+  background-color:var(--card) !important;
+  color:var(--text) !important;
+}
+:root[data-theme="light"] .themeCtl select option,
+:root[data-theme="dark"] .themeCtl select option{
+  /* alguns navegadores (Chrome/Edge no Windows) pintam a lista nativa do
+     <option> com a fonte do SO, ignorando o font-family herdado do <select>
+     pai -- reforca aqui pra "Claro"/"Escuro" no menu aberto tambem baterem
+     com a cotacao, nao so o texto visivel no controle fechado. */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  background-color:var(--card) !important;
+  color:var(--text) !important;
+}

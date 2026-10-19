@@ -54,7 +54,7 @@
     logo.setAttribute("aria-hidden", "true");
     marca.appendChild(logo);
     var marcaTxt = document.createElement("span");
-    marcaTxt.textContent = "Consolidação";
+    marcaTxt.textContent = "Menu";
     marca.appendChild(marcaTxt);
     inner.appendChild(marca);
 
