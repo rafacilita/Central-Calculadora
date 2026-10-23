@@ -4485,12 +4485,105 @@ document.getElementById("paxq_adt").value = "1";
         return normalizePaxName(String(s||"").replace(/\s+/g," ").trim());
       }
 
+      function isDobToken(v){
+        return /^\d{2}[A-Z]{3}\d{2}$/i.test(String(v||"").replace(/\s/g,""));
+      }
+
       function splitNameTitle(namePart){
-        const m = String(namePart||"").trim().match(/^(.*?)(?:\s+(MR|MRS|MS|MISS|MSTR|INF))?$/i);
+        const raw = String(namePart||"").replace(/\s+/g," ").trim();
+        const m = raw.match(/^(.*?)(?:\s*(MSTR|MISS|MRS|MR|MS|INF))$/i);
         return {
-          base: normalizePersonName(m ? m[1] : namePart),
+          base: normalizePersonName((m && m[1].trim()) ? m[1] : raw),
           title: (m && m[2]) ? String(m[2]).toUpperCase() : ""
         };
+      }
+
+      function normalizeFullPaxName(name, type){
+        let s = normalizePersonName(String(name||"").replace(/\([^)]*\)/g,"").replace(/\s*\/\s*/g,"/"));
+        if(!s.includes("/")) return s;
+        const parts = s.split("/");
+        const surname = normalizePersonName(parts.shift() || "");
+        const given = normalizePersonName(parts.join(" "));
+        const nt = splitNameTitle(given);
+        const title = nt.title || (String(type||"").toUpperCase() === "INF" ? "INF" : "");
+        return `${surname}/${nt.base}${title ? " " + title : ""}`.trim();
+      }
+
+      function inferPaxTypeFromQualifiers(groups, raw, fallback){
+        const joined = [...(Array.isArray(groups) ? groups : []), raw || ""].join(" ").toUpperCase();
+        if(/\b(?:CHD|CNN|CHLD|CHILD)\b|\bC\d{2}\b/.test(joined)) return "CHD";
+        const infStandalone = (Array.isArray(groups) ? groups : []).some(g=>/^\s*(?:INF|INFT|INFANT)\s*$/i.test(g));
+        const infRaw = /\b(?:INF|INFT|INFANT)\b/i.test(String(raw||"")) && !/\bINF\s*\//i.test(joined);
+        if(infStandalone || infRaw) return "INF";
+        return fallback || "ADT";
+      }
+
+      function splitTopLevelSlash(s){
+        const out = [];
+        let cur = "";
+        let depth = 0;
+        for(const ch of String(s||"")){
+          if(ch === "(") depth++;
+          if(ch === ")" && depth > 0) depth--;
+          if(ch === "/" && depth === 0){
+            out.push(cur);
+            cur = "";
+          }else{
+            cur += ch;
+          }
+        }
+        out.push(cur);
+        return out.map(x=>x.trim()).filter(Boolean);
+      }
+
+      function findCommandTailEnd(src, start, maxEnd){
+        let end = Math.min(maxEnd || src.length, src.length);
+        const nl = src.indexOf("\n", start);
+        if(nl >= 0) end = Math.min(end, nl);
+        const tail = src.slice(start, end);
+        const stop = tail.search(/\b(?:AP|RF|TK|TKTL|TKOK|SS|SR|OS|RM|RC|OP|ET|IG|ER)\b/i);
+        if(stop >= 0) end = start + stop;
+        return end;
+      }
+
+      function parseNameCommandPassengers(text){
+        const src = String(text||"")
+          .toUpperCase()
+          .replace(/\r/g,"\n")
+          .replace(/[ \t]*\/[ \t]*/g,"/")
+          .replace(/[ \t]*\([ \t]*/g,"(")
+          .replace(/[ \t]*\)[ \t]*/g,")");
+        const re = /\bNM\s*(\d{1,2})([A-Z][A-Z '\-]{1,35})\//g;
+        const matches = Array.from(src.matchAll(re));
+        const out = [];
+        let seatIdx = 1;
+        let infIdx = 9000;
+        for(let i=0;i<matches.length;i++){
+          const m = matches[i];
+          const count = parseInt(m[1], 10) || 1;
+          const surname = normalizePersonName(m[2]);
+          const start = m.index + m[0].length;
+          const next = matches[i+1] ? matches[i+1].index : src.length;
+          const end = findCommandTailEnd(src, start, next);
+          const tail = src.slice(start, end);
+          const parts = splitTopLevelSlash(tail);
+          let used = 0;
+          for(const part of parts){
+            if(used >= count) break;
+            const groups = Array.from(part.matchAll(/\(([^)]*)\)/g)).map(x=>String(x[1]||"").trim());
+            const clean = normalizePersonName(part.replace(/\([^)]*\)/g,""));
+            if(!clean || !/[A-Z]/.test(clean)) continue;
+            const type = inferPaxTypeFromQualifiers(groups, clean, "ADT");
+            const idx = seatIdx++;
+            out.push({idx, type, name: normalizeFullPaxName(`${surname}/${clean}`, type), source:"NM"});
+            used++;
+            for(const g of groups){
+              if(!/^\s*INF(?:T|ANT)?\s*\//i.test(g)) continue;
+              out.push({idx:infIdx++, type:"INF", name:parseInfName(g, `${surname}/${clean}`), source:"NM_INF_INLINE", linkedTo:idx});
+            }
+          }
+        }
+        return out;
       }
 
       function parseInfName(rawInf, adultName){
@@ -4498,8 +4591,7 @@ document.getElementById("paxq_adt").value = "1";
         let s = String(rawInf||"").trim();
         s = s.replace(/^\s*INF(?:ANT)?/i, "").replace(/^\//, "").trim();
         const parts = s.split("/").map(x=>x.trim()).filter(Boolean);
-        const isDob = (v)=>/^\d{2}[A-Z]{3}\d{2}$/i.test(String(v||"").replace(/\s/g,""));
-        while(parts.length && isDob(parts[parts.length-1])) parts.pop();
+        while(parts.length && isDobToken(parts[parts.length-1])) parts.pop();
         if(parts.length >= 2){
           const sn = normalizePersonName(parts[0] || adultSurname);
           const tail = splitNameTitle(parts[1]);
@@ -4522,12 +4614,19 @@ document.getElementById("paxq_adt").value = "1";
         function addPax(idx, type, name, extra){
           const t = String(type||"").toUpperCase();
           if(!["ADT","CHD","INF"].includes(t)) return;
-          const nm = normalizePersonName(name);
+          const nm = normalizeFullPaxName(name, t);
           if(!nm) return;
-          const key = `${idx}|${t}|${nm}`;
+          const linkKey = extra && Number.isFinite(extra.linkedTo) ? `L${extra.linkedTo}` : `I${Number(idx)||0}`;
+          const key = `${linkKey}|${t}|${nm}`;
           if(seen.has(key)) return;
           seen.add(key);
           pax.push(Object.assign({idx:Number(idx)||0, type:t, name:nm}, extra||{}));
+        }
+
+        const commandPax = parseNameCommandPassengers(norm.text);
+        for(const p of commandPax){
+          addPax(p.idx, p.type, p.name, {source:p.source, linkedTo:p.linkedTo});
+          confidence += p.type === "INF" ? 8 : 10;
         }
 
         for(const line of norm.lines){
@@ -4538,29 +4637,61 @@ document.getElementById("paxq_adt").value = "1";
           const namePart = (rest.split("(")[0] || rest).trim();
           if(!/\//.test(namePart)) continue;
           const groups = Array.from(rest.matchAll(/\(([^)]*)\)/g)).map(m=>String(m[1]||"").trim());
-          let type = "ADT";
-          if(groups.some(g=>/^\s*CHD\b/i.test(g))) type = "CHD";
-          else if(groups.some(g=>/^\s*ADT\b/i.test(g))) type = "ADT";
-          else if(groups.some(g=>/^\s*INF\s*$/i.test(g))) type = "INF";
+          let type = inferPaxTypeFromQualifiers(groups, rest, "ADT");
           addPax(idx, type, namePart, {source:"PNR"});
           confidence += 12;
 
           for(const g of groups){
-            if(!/^\s*INF/i.test(g) || /^\s*INF\s*$/i.test(g)) continue;
+            if(!/^\s*INF(?:T|ANT)?/i.test(g) || /^\s*(?:INF|INFT|INFANT)\s*$/i.test(g)) continue;
             addPax(nextInfIdx++, "INF", parseInfName(g, namePart), {source:"INF_INLINE", linkedTo:idx});
             confidence += 8;
           }
         }
 
+        const chdRefs = new Set();
+        for(const line of norm.lines){
+          for(const m of line.matchAll(/\bS(?:SR|R)\s+CHLD\b.*?\/P(\d+)/ig)){
+            chdRefs.add(parseInt(m[1],10));
+          }
+        }
+        if(chdRefs.size){
+          for(const p of pax){
+            if(chdRefs.has(Number(p.idx)) && p.type !== "INF"){
+              p.type = "CHD";
+              p.source = `${p.source || "PNR"}+SSR_CHLD`;
+              confidence += 6;
+            }
+          }
+        }
+
         // SSR INFT fallback
         for(const line of norm.lines){
-          const m = line.match(/SSR\s+INFT\b.*?([A-Z][A-Z '\-]+)\/(.+?)(?:\s+|\/)(\d{2}[A-Z]{3}\d{2}).*?\/P(\d+)/i);
-          if(!m) continue;
-          const sn = normalizePersonName(m[1]);
-          const tail = splitNameTitle(m[2]);
-          const full = `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
-          addPax(nextInfIdx++, "INF", full, {source:"SSR_INFT", linkedTo:parseInt(m[4],10), dob:m[3]});
-          confidence += 10;
+          let m = line.match(/\bS(?:SR|R)\s+INFT\b\s*-?\s*([A-Z][A-Z '\-]+)\/(.+?)(?:\s+|\/)(\d{2}[A-Z]{3}\d{2}).*?\/P(\d+)/i);
+          if(m){
+            const sn = normalizePersonName(m[1]);
+            const tail = splitNameTitle(m[2]);
+            const full = `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
+            addPax(nextInfIdx++, "INF", full, {source:"SSR_INFT", linkedTo:parseInt(m[4],10), dob:m[3]});
+            confidence += 10;
+            continue;
+          }
+          m = line.match(/\bS(?:SR|R)\s+INFT\b\s*-?\s*([A-Z][A-Z '\-]+)\/([^\/\s]+(?:\s+(?:MSTR|MISS|MRS|MR|MS))?).*?\/P(\d+)/i);
+          if(m){
+            const sn = normalizePersonName(m[1]);
+            const tail = splitNameTitle(m[2]);
+            const full = `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
+            addPax(nextInfIdx++, "INF", full, {source:"SSR_INFT", linkedTo:parseInt(m[3],10)});
+            confidence += 8;
+          }
+        }
+
+        const finalSeen = new Set();
+        for(let i=pax.length-1;i>=0;i--){
+          const p = pax[i] || {};
+          const linkKey = Number.isFinite(p.linkedTo) ? `L${p.linkedTo}` : `I${Number(p.idx)||0}`;
+          const key = `${linkKey}|${p.type}|${p.name}`;
+          if(finalSeen.has(key)) pax.splice(i,1);
+          else finalSeen.add(key);
         }
 
         pax.sort((a,b)=>{
@@ -4768,81 +4899,127 @@ document.getElementById("paxq_adt").value = "1";
       }
 
 
+      // Reconhecimento do token de bagagem: portado da linhagem 1.0.24c
+      // (Teste_FXO_Calculadora, branch feature/melhorias). O regex anterior só
+      // aceitava "1P"/"0P"/"NIL" e ignorava silenciosamente "1PC", "NO BAG",
+      // "23K" e "1PC/23KG" — com franquia diferente por trecho, lia só os
+      // trechos no formato antigo e declarava franquia uniforme, mandando
+      // bagagem errada no e-mail da agência.
+      const BAG_TOKEN_PATTERN = "(?:NO\\s*BAG(?:GAGE)?|NIL|0\\s*(?:P(?:C)?|K(?:G)?)|\\d{1,2}\\s*P(?:C)?(?:\\s*\\/?\\s*\\d{2}\\s*K(?:G)?)?|\\d{1,2}\\s*X\\s*\\d{2}\\s*K(?:G)?|\\d{2}\\s*K(?:G)?)";
+
+      // Devolve {pieces, label} ou null se o texto não é um token de bagagem.
+      // pieces === null significa franquia por peso, sem contagem de peças.
+      function normalizeBagToken(raw){
+        const original = String(raw || "").trim();
+        const token = original.toUpperCase().replace(/\s+/g, "").replace(/KG/g, "K");
+        if(!token) return null;
+        if(/^(?:NOBAG(?:GAGE)?|NIL|0P|0PC|0K)$/.test(token)) return {pieces:0, raw:original, label:'Sem bagagem'};
+
+        let m = token.match(/^(\d{1,2})P(?:C)?(?:\/?(\d{2})K)?$/);
+        if(m){
+          const pieces = parseInt(m[1], 10) || 0;
+          const kg = m[2] ? parseInt(m[2], 10) : 0;
+          if(pieces <= 0) return {pieces:0, raw:original, label:'Sem bagagem'};
+          return {pieces, raw:original, label:`${pieces}PC${kg ? '/' + kg + 'kg' : ''}`};
+        }
+        m = token.match(/^(\d{1,2})X(\d{2})K$/);
+        if(m) return {pieces: parseInt(m[1],10) || 0, raw:original, label:`${parseInt(m[1],10)||0}x${parseInt(m[2],10)||0}kg`};
+
+        m = token.match(/^(\d{2})K$/);
+        if(m) return {pieces:null, raw:original, label:`${parseInt(m[1],10)}kg`};
+
+        return null;
+      }
+
+      function extractBagToken(line){
+        const src = String(line || "");
+        const m = src.match(new RegExp("(?:^|\\s)(" + BAG_TOKEN_PATTERN + ")\\s*$", "i"));
+        if(m) return normalizeBagToken(m[1]);
+        // Fallback: linha que fala de bagagem mas tem o token no meio — pega o último.
+        if(/\b(?:BG|BAG|BAGGAGE|ALLOW(?:ANCE)?)\b/i.test(src)){
+          const todos = Array.from(src.matchAll(new RegExp("(?:^|\\s)(" + BAG_TOKEN_PATTERN + ")(?=\\s|$)", "ig")));
+          if(todos.length) return normalizeBagToken(todos[todos.length-1][1]);
+        }
+        return null;
+      }
+
       function parseBagFromText(text){
         const s = String(text || "");
         const lines = normalizeGdsText(s).lines;
         let inTable = false;
         let currentOrigin = "";
-        const routes = [];
-
-        function bagLabel(n){ return n > 0 ? `${n}PC` : 'Sem bagagem'; }
-        function pushRoute(from, to, pieces){
-          if(!from || !to) return;
-          routes.push({ from, to, pieces, label: bagLabel(pieces) });
-        }
+        const rows = [];
 
         for (const rawLine of lines){
           const line = String(rawLine || "").trim().replace(/\s+/g, " ");
-          if(/AL\s+FLGT\s+BK\s+DATE\s+TIME.*BG/i.test(line)){ inTable = true; continue; }
+          if(/AL\s+FLGT\s+BK\s+DATE\s+TIME.*\bBG\b|BAGG?AGE\s+ALLOWANCE|BAG\s+ALLOWANCE/i.test(line)){ inTable = true; continue; }
           if(!inTable) continue;
           if(/ORIGIN\s+TRVL\s+CURRENCY|OLD\s+BASE\s+FARE/i.test(line)) break;
           if(!line) continue;
 
           const surface = line.match(/^([A-Z]{3})\s+(?:S\s+U\s+R\s+F\s+A\s+C\s+E|ARNK)$/i);
-          if(surface){
-            currentOrigin = String(surface[1]).toUpperCase();
-            continue;
-          }
+          if(surface){ currentOrigin = String(surface[1]).toUpperCase(); continue; }
 
           const loneCity = line.match(/^([A-Z]{3})$/i);
-          if(loneCity){
-            currentOrigin = String(loneCity[1]).toUpperCase();
-            continue;
+          if(loneCity){ currentOrigin = String(loneCity[1]).toUpperCase(); continue; }
+
+          const bag = extractBagToken(line);
+          if(!bag) continue;
+
+          // Duas formas de linha: "ORIG DEST CIA VOO ..." (as duas cidades na
+          // própria linha) ou "DEST CIA VOO ..." (origem vem da linha anterior).
+          // O \s+\d depois da cia evita confundir código de cidade com cia.
+          let from = "", to = "";
+          const par = line.match(/^([A-Z]{3})\s+([A-Z]{3})\s+[A-Z0-9]{2}\s+\d/);
+          if(par){
+            from = par[1].toUpperCase();
+            to = par[2].toUpperCase();
+          }else{
+            const destMatch = line.match(/^([A-Z]{3})\b/);
+            if(destMatch){ from = currentOrigin; to = destMatch[1].toUpperCase(); }
           }
 
-          const bagMatch = line.match(/\b(NIL|0P|\d{1,2}P)\s*$/i);
-          if(!bagMatch) continue;
-
-          const destMatch = line.match(/^([A-Z]{3})\b/);
-          if(!destMatch) continue;
-
-          const dest = String(destMatch[1]).toUpperCase();
-          const rawBag = String(bagMatch[1]).toUpperCase();
-          const pieces = /^(?:NIL|0P)$/i.test(rawBag) ? 0 : parseInt(rawBag, 10);
-
-          pushRoute(currentOrigin, dest, pieces);
-          currentOrigin = dest;
+          rows.push({ from, to, pieces: bag.pieces, label: bag.label });
+          if(to) currentOrigin = to;
         }
 
-        if(!routes.length){
-          if(/\bNIL\b|\b0P\b/i.test(s)) return {pieces:[0], text:'Sem bagagem', groups:[], routes:[]};
+        if(!rows.length){
+          if(/\bNIL\b|\b0\s*P(?:C)?\b|\bNO\s*BAG(?:GAGE)?\b/i.test(s)) return {pieces:[0], text:'Sem bagagem', groups:[], routes:[]};
           return {pieces:[], text:'', groups:[], routes:[]};
         }
 
-        const uniq = Array.from(new Set(routes.map(r => r.pieces)));
-        if(uniq.length === 1){
-          const only = uniq[0];
+        const uniqLabels = Array.from(new Set(rows.map(r => r.label)));
+        const uniqPieces = Array.from(new Set(rows.map(r => r.pieces)));
+
+        // Franquia igual em tudo: não precisa dizer onde.
+        if(uniqLabels.length === 1){
           return {
-            pieces: uniq,
-            text: only > 0 ? `${only}PC` : 'Sem bagagem',
-            groups: [{ pieces: only, routes: routes.map(r => `${r.from}-${r.to}`) }],
-            routes
+            pieces: uniqPieces,
+            text: uniqLabels[0],
+            groups: [{ pieces: rows[0].pieces, label: rows[0].label, routes: rows.filter(r=>r.from&&r.to).map(r => `${r.from}-${r.to}`) }],
+            routes: rows
           };
         }
 
+        // Franquia varia: apresenta por ROTA (mais legível para a agência).
+        // Se a cadeia origem-destino não fechou — SURFACE/ARNK no meio, ou
+        // máscara sem a cidade de origem — cai para rótulo por segmento.
+        const temRotas = rows.every(r => r.from && r.to);
         const groups = [];
-        for (const r of routes){
+        for (const r of rows){
           const last = groups[groups.length - 1];
-          const routeLabel = `${r.from}-${r.to}`;
-          if(last && last.pieces === r.pieces){
-            last.routes.push(routeLabel);
-          } else {
-            groups.push({ pieces: r.pieces, routes: [routeLabel] });
+          if(last && last.label === r.label){
+            if(r.from && r.to) last.routes.push(`${r.from}-${r.to}`);
+          }else{
+            groups.push({ pieces: r.pieces, label: r.label, routes: r.from && r.to ? [`${r.from}-${r.to}`] : [] });
           }
         }
 
-        const textOut = groups.map(g => `${bagLabel(g.pieces)}: ${g.routes.join(', ')}`).join(' • ');
-        return { pieces: uniq, text: textOut, groups, routes };
+        const textOut = temRotas
+          ? groups.map(g => `${g.label}: ${g.routes.join(', ')}`).join(' • ')
+          : rows.map((r, i) => `${r.label} (SEG ${i+1})`).join(' • ');
+
+        return { pieces: uniqPieces, text: textOut, groups, routes: rows };
       }
 
 
@@ -5603,6 +5780,148 @@ document.getElementById("paxq_adt").value = "1";
         const run = ()=>{ if(isInterAuto()) applyTickets(); };
         tk.addEventListener('paste', ()=> setTimeout(run, 0));
         tk.addEventListener('input', ()=>{ clearTimeout(tk.__fxq_t); tk.__fxq_t = setTimeout(run, 250); });
+      }
+
+      // ----- Suite de simulacao do parser (portada da linhagem 1.0.24c) -----
+      // Roda contra as funcoes REAIS deste arquivo, sem copia. Rode no console
+      // com runFXQParserSimulations(), ou abra a pagina com #fxo-lab na URL que
+      // ela dispara sozinha e grava o resultado em window.__FXQ_LAST_SIMULATIONS.
+      // Ao mexer em parsePassengersData/parseBagFromText/parseFxoBlock, rodar isto.
+      function runParserSimulations(){
+        const sep = " • ";
+        const savedSegments = state.parseMeta.segments;
+        const results = [];
+        const sameQty = (actual, expected)=>["ADT","CHD","INF"].every(t=>(actual[t]||0)===(expected[t]||0));
+        const namesOf = (parsed)=>parsed.pax.map(p=>`${p.type}:${p.name}${p.linkedTo ? `->P${p.linkedTo}` : ""}`);
+
+        function addPaxCase(name, input, expectedQty, requiredNames){
+          const parsed = parsePassengersData(input);
+          const names = namesOf(parsed);
+          const missing = (requiredNames||[]).filter(n=>!names.includes(n));
+          const pass = sameQty(parsed.qty, expectedQty) && !missing.length;
+          results.push({type:"PAX", name, pass, expected:JSON.stringify(expectedQty), actual:JSON.stringify(parsed.qty), detail:missing.length ? `faltou ${missing.join(", ")}` : names.join(" | ")});
+        }
+
+        function addBagCase(name, fxoText, expectedBag){
+          state.parseMeta.segments = parseSegments(fxoText);
+          const parsed = parseFxoBlock(fxoText, "ADT");
+          results.push({type:"BAG", name, pass:parsed.bag === expectedBag, expected:expectedBag, actual:parsed.bag || "", detail:`segmentos ${state.parseMeta.segments.length}`});
+        }
+
+        const baseFxo = [
+          "FARE BALANCE        USD 10.00",
+          "PENALTY             USD 0.00",
+          "TOTAL ADD COLL      USD 10.00",
+          "AL FLGT BK DATE TIME FARE BASIS NVB NVA BG"
+        ].join("\n");
+
+        addPaxCase("PNR 1 ADT com datas de segmento", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z BMQ84Q",
+          "1.VICENTE MENDES CARNEIRO/JOSE MR(ADT/09NOV90)",
+          "2 KL9299 T 31MAY 7*CWBGRU HK1 1105 1215 31MAY E KL/BMQ84Q",
+          "3 KL2416 T 31MAY 7*GRUCDG HK1 1440 0705 01JUN E KL/BMQ84Q",
+          "4 KL2014 T 01JUN 1*CDGNTE HK1 0835 0940 01JUN E KL/BMQ84Q"
+        ].join("\n"), {ADT:1, CHD:0, INF:0}, ["ADT:VICENTE MENDES CARNEIRO/JOSE MR"]);
+
+        addPaxCase("PNR ADT + CHD explicito", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z ABC123",
+          "1.SILVA/JOAO MR(ADT/01JAN80)",
+          "2.SILVA/MARIA MISS(CHD/10OCT18)"
+        ].join("\n"), {ADT:1, CHD:1, INF:0}, ["CHD:SILVA/MARIA MISS"]);
+
+        addPaxCase("PNR ADT com INF inline", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z INF123",
+          "1.COSTA/CARLOS MR(ADT/01JAN80)(INF/COSTA/BEBE MSTR/20JAN25)"
+        ].join("\n"), {ADT:1, CHD:0, INF:1}, ["INF:COSTA/BEBE MSTR->P1"]);
+
+        // Regressao: o comando NM voltava ZERO passageiros antes do porte 1.0.24c.
+        addPaxCase("Comandos NM com ADT/CHD/INF", [
+          "NM2SILVA/JOAO MR/MARIA MRS",
+          "NM1SOUZA/ANA MISS(CHD/12MAR18)",
+          "NM1COSTA/CARLOS MR(INF/COSTA/BEBE MSTR/20JAN25)"
+        ].join("\n"), {ADT:3, CHD:1, INF:1}, ["CHD:SOUZA/ANA MISS", "INF:COSTA/BEBE MSTR->P4"]);
+
+        // Regressao: o SSR CHLD classificava a crianca como adulto (tarifa errada).
+        addPaxCase("SSR CHLD/INFT fallback", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z SSR123",
+          "1.SANTOS/CAMILA MISS",
+          "2.SANTOS/JOAO MR",
+          "SSR CHLD YY HK1-10OCT18/P1",
+          "SSR INFT-SANTOS/BEBE MSTR/15MAR25/P2"
+        ].join("\n"), {ADT:1, CHD:1, INF:1}, ["CHD:SANTOS/CAMILA MISS", "INF:SANTOS/BEBE MSTR->P2"]);
+
+        addBagCase("Bagagem igual em todos os trechos", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 1PC",
+          "GRU CDG AF 0455 Y *31MAY 1440 ABC 1PC"
+        ].join("\n"), "1PC");
+
+        // Apresentacao por ROTA (nossa), nao por segmento: a agencia le a rota.
+        addBagCase("Bagagem mista por segmento", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 1PC",
+          "GRU CDG AF 0455 Y *31MAY 1440 ABC 2PC",
+          "CDG NTE AF 2014 Y *01JUN 0835 ABC NO BAG"
+        ].join("\n"), `1PC: CWB-GRU${sep}2PC: GRU-CDG${sep}Sem bagagem: CDG-NTE`);
+
+        addBagCase("Bagagem com peso por peca", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 1PC/23KG",
+          "GRU CDG AF 0455 Y *31MAY 1440 ABC 1X23KG"
+        ].join("\n"), `1PC/23kg: CWB-GRU${sep}1x23kg: GRU-CDG`);
+
+        addBagCase("Bagagem por peso sem peca", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 23K"
+        ].join("\n"), "23kg");
+
+        // Regressao do bug corrigido em cb72fe0: formatos "1P" e "2PC"
+        // misturados na mesma mascara. O regex antigo lia so os "1P", nao
+        // achava os "2PC" e declarava franquia UNIFORME - mandava bagagem
+        // menor que a real para a agencia, e o e-mail parecia certo.
+        addBagCase("Formatos 1P e 2PC misturados (nao declarar uniforme)", [
+          baseFxo,
+          "GRU",
+          "GIG LA 3201 Y 31MAY 1105 ABC 1P",
+          "MIA LA 3202 Y 05JUN 1400 ABC 2PC"
+        ].join("\n"), `1PC: GRU-GIG${sep}2PC: GIG-MIA`);
+
+        // Regressao: franquia uniforme no formato com sufixo PC ficava vazia.
+        addBagCase("Sufixo PC uniforme (antes vinha vazio)", [
+          baseFxo,
+          "GRU",
+          "GIG LA 3201 Y 31MAY 1105 ABC 1PC",
+          "MIA LA 3202 Y 05JUN 1400 ABC 1PC"
+        ].join("\n"), "1PC");
+
+        // Regressao: NO BAG e franquia por peso ficavam vazias.
+        addBagCase("NO BAG uniforme (antes vinha vazio)", [
+          baseFxo,
+          "GRU",
+          "GIG LA 3201 Y 31MAY 1105 ABC NO BAG"
+        ].join("\n"), "Sem bagagem");
+
+        state.parseMeta.segments = savedSegments;
+        window.__FXQ_LAST_SIMULATIONS = results;
+        if(window.console && console.table) console.table(results);
+        if(String(location.hash||"").toLowerCase().includes("fxo-lab")){
+          let pre = document.getElementById("fxqParserSimulationResults");
+          if(!pre){
+            pre = document.createElement("pre");
+            pre.id = "fxqParserSimulationResults";
+            pre.hidden = true;
+            document.body.appendChild(pre);
+          }
+          pre.textContent = JSON.stringify(results, null, 2);
+          document.body.setAttribute("data-fxq-sim-pass", results.every(r=>r.pass) ? "1" : "0");
+        }
+        return results;
+      }
+
+      state.runSimulations = runParserSimulations;
+      window.runFXQParserSimulations = runParserSimulations;
+      if(String(location.hash||"").toLowerCase().includes("fxo-lab")){
+        setTimeout(runParserSimulations, 0);
       }
 
       applyInterTipoUI();
