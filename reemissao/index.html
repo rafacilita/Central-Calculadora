@@ -1383,7 +1383,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
           <div class="btns" style="margin-top:10px">
             <button class="action" id="btnCarregarRACode">Carregar CRR</button>
           </div>
-          <div class="muted small" style="margin-top:8px">Se você colar um texto maior (ex.: a observação inteira do RF), o sistema tenta achar automaticamente o trecho <b>CRR5/CRR4/CRR2-...</b> (ou <b>CRR1/RA1</b> antigos). CRR5 ainda é lido (compatibilidade com cotações antigas), mas esta build nunca gera CRR5 novo — o e-mail sempre leva o CRR4 completo.</div>
+          <div class="muted small" style="margin-top:8px">Se você colar um texto maior (ex.: a observação inteira do RF), o sistema tenta achar automaticamente o trecho <b>CRR4/CRR2-...</b> (ou <b>CRR1/RA1</b> antigos). O CRR é montado e lido só no seu navegador, sem servidor externo; o e-mail sempre leva o CRR4 completo. CRR5 não é mais suportado.</div>
         </div>
 
       </div>      </div>
@@ -3320,6 +3320,12 @@ function fmtUSD(n){
     // com o painel "câmbio IATA" do usuário, que só bate exatamente para USD.
     const BCB_FX_SUPPORTED = ["USD"];
     const BCB_FX_CACHE_KEY = "bcb_fx_cache_v1";
+    // Ao ABRIR a calculadora, o câmbio USD é sempre o vigente de hoje, mesmo que o rascunho
+    // restaurado traga o de outro dia — e continua editável. A atualização é única (consumida
+    // na 1ª busca bem-sucedida) e é cancelada se o atendente digitar no câmbio ou se um CRR
+    // for carregado (o CRR é um cálculo fechado: o câmbio dele não pode mudar).
+    let __fxRefreshOnOpen = true;
+    function __fxBlockRefreshOnOpen(){ __fxRefreshOnOpen = false; }
 
         
     async function _fetchBcbVenda(currency, dateObj){
@@ -3396,14 +3402,16 @@ function fmtUSD(n){
         return;
       }
 
-      const willFill = fxEl && (!fxEl.value.trim() || fxEl.dataset.auto === "1");
+      const refresh = __fxRefreshOnOpen;
+      __fxRefreshOnOpen = false;
+      const willFill = fxEl && (refresh || !fxEl.value.trim() || fxEl.dataset.auto === "1");
       if(willFill){
         fxEl.value = fmtNumPT4(data.value);
         fxEl.dataset.auto = "1";
       }
       if(fxStatus) fxStatus.textContent = willFill ? "Preenchimento automático." : "Valor mantido do rascunho — confira o câmbio.";
 
-      if(usdWrap && !usdWrap.classList.contains("hidden") && usdEl && (!usdEl.value.trim() || usdEl.dataset.auto === "1")){
+      if(usdWrap && !usdWrap.classList.contains("hidden") && usdEl && (refresh || !usdEl.value.trim() || usdEl.dataset.auto === "1")){
         const usdData = await fetchOfficialFx("USD");
         if(isStale()) return;
         if(usdData){ usdEl.value = fmtNumPT4(usdData.value); usdEl.dataset.auto = "1"; }
@@ -3799,39 +3807,10 @@ function buildCRRCode(){
     }
 
 
-// ===== CRR5 nesta build: só LEITURA, nunca geração =====
-// Esta build nunca cria CRR5 novo (sem chamada a /save, sem id curto no
-// e-mail). O código que vai no e-mail é sempre o CRR4 montado localmente
-// por buildCRRCode(). Mas um CRR5 colado em "Carregar CRR" — de uma
-// cotação enviada antes da virada para CRR4-only — ainda é resolvido via
-// Worker, para não perder o acesso a cálculos já enviados nesse formato.
-const CRR5_API = "https://crr-api.rexturfacilita.workers.dev/".replace(/\/+$/,"");
-
-function extractCRR5(text){
-  const compact = String(text || "").replace(/\s+/g,"");
-  const mm = compact.match(/CRR5-([A-Za-z0-9]{6,64})/i);
-  if(!mm) return null;
-  return `CRR5-${mm[1].toLowerCase()}`;
-}
-
-const CRR5_TIMEOUT_MS = 6000;
-
-async function loadCRR5ToCRR4(crr5){
-  const id = String(crr5 || "").trim().replace(/^CRR5-/i,"").toLowerCase();
-  const ctrl = new AbortController();
-  const timer = setTimeout(()=>ctrl.abort(), CRR5_TIMEOUT_MS);
-  let r;
-  try{
-    r = await fetch(`${CRR5_API}/load?id=${encodeURIComponent(id)}`, { signal: ctrl.signal });
-  }catch(e){
-    if(e && e.name === "AbortError") throw new Error("Servidor CRR5 não respondeu a tempo");
-    throw new Error("Falha de conexão ao carregar CRR curto");
-  }finally{ clearTimeout(timer); }
-  if(!r.ok) throw new Error("CRR curto não encontrado (ou expirou)");
-  const data = await r.json().catch(()=>null);
-  if(!data || typeof data.payload !== "string") throw new Error("Resposta inválida do servidor");
-  return data.payload;
-}
+// ===== CRR4 puro: sem nenhuma chamada de rede =====
+// O CRR e montado e lido so no navegador (buildCRRCode / loadCRRCode). O CRR5
+// (Cloudflare Worker + Upstash) foi removido por completo: nem gera, nem le.
+// Um CRR5 colado em "Carregar CRR" e recusado com aviso (ver btnCarregarRACode).
 
 function getCRRCodeForEmail(){
   return buildCRRCode();
@@ -3898,6 +3877,7 @@ function getCRRCodeForEmail(){
 
       // reseta tudo antes de aplicar (garante que campos omitidos voltem ao padrão)
       const silentClear = true;
+      __fxBlockRefreshOnOpen();
       clearAll(silentClear);
 
       // aplica modo primeiro (pra mostrar os campos certos)
@@ -4141,7 +4121,7 @@ const regrasExtra = regrasUser ? `<p style="margin:8px 0 0"><b>${t.obs}</b><br/>
 
           ${buildEmailSectionBlock(t.voosSimulados, voos, { strong:true })}
           ${buildEmailSectionBlock(t.regras, `${regrasPadrao}${regrasExtra}`, { html:true, mono:false, bodyStyle:'padding:14px 16px;' })}
-          <p style="margin:6px 0 0; font-size:9px; color:#999">${crrEmailHtml}</p>
+          <p style="margin:6px 0 0; font-size:8px; color:#bbb">${crrEmailHtml}</p>
         </div>
       `.trim();
     }
@@ -4247,7 +4227,7 @@ function buildEmailHtmlInter(){
           ${buildEmailSectionBlock(t.voosSimulados, voos, { strong:true })}
           ${buildEmailSectionBlock(isEN ? "CALCULATION - INTERNAL USE" : "CÁLCULO - USO INTERNO", interno)}
           ${buildEmailSectionBlock(isEN ? "ORIGINAL TICKET" : "BILHETE ORIGINAL", original)}
-          <p style="margin:6px 0 0; font-size:9px; color:#999">${crrEmailHtml}</p>
+          <p style="margin:6px 0 0; font-size:8px; color:#bbb">${crrEmailHtml}</p>
         </div>
       `.trim();
     }
@@ -6042,11 +6022,9 @@ document.getElementById("paxq_adt").value = "1";
 document.getElementById("btnCarregarRACode").addEventListener("click", async ()=>{
       const code = (document.getElementById("raCode").value || "").trim();
       try{
-        // CRR5 colado (cotação antiga) é resolvido via Worker; o campo volta a
-        // mostrar o CRR4, que é o único formato que esta build gera.
-        const c5 = extractCRR5(code);
-        const crr4 = c5 ? await loadCRR5ToCRR4(c5) : code;
-        loadCRRCode(crr4);
+        // CRR5 dependia de servidor externo e foi removido: nao ha consulta de rede.
+        if(/CRR5-/i.test(code.replace(/s+/g,""))) throw new Error("CRR5 não é mais suportado (sem consulta externa). Use um CRR4.");
+        loadCRRCode(code);
         const rc = document.getElementById("raCode");
         if(rc){ rc.dataset.manual = "0"; rc.dataset.sig = ""; rc.value = buildCRRCode(); }
         lastEmailHtml = generateEmail();
@@ -6096,7 +6074,7 @@ document.getElementById("btnCarregarRACode").addEventListener("click", async ()=
     }
     for(const id of ["inter_fx","inter_fx_usd"]){
       const el = document.getElementById(id);
-      if(el) el.addEventListener("input", ()=>{ delete el.dataset.auto; });
+      if(el) el.addEventListener("input", ()=>{ delete el.dataset.auto; __fxBlockRefreshOnOpen(); });
     }
     if(getActiveMode() === "INTER") maybeAutofillFx();
 
