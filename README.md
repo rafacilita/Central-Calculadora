@@ -44,8 +44,12 @@ re-sincronize (abaixo). Uma edição feita só aqui é perdida na próxima sincr
 
 | Pasta        | Fonte                                                              |
 |--------------|--------------------------------------------------------------------|
-| `cotacao/`   | repo `rafacilita/rextur-cotacao` → `index.html` + `logo-rextur.png` + `icone.jpg` |
-| `reemissao/` | projeto "Calculadora Reemissão" → `dev-fxo/index-dev.html`         |
+| `cotacao/`   | repo `rafacilita/rextur-cotacao` (local: `Documentos/Central Calculadora/cotacao`, branch `main`) → `index.html` + `logo-rextur.png` + `icone.jpg` |
+| `reemissao/` | repo `rafacilita/teste-calculadora-2.0` (local: `Documentos/Central Calculadora/reemissao`, branch `master`) → `dev-fxo/index-dev.html` |
+
+O `sync.cjs` lê os arquivos do disco e **aborta** se a fonte não estiver na branch indicada
+acima ou tiver alteração não commitada — assim uma branch de trabalho (ex.: refatoração com
+PR aberto) não vai ao ar por acidente.
 
 O app de reemissão é 100% autocontido (as imagens são `data:` URI), então é um arquivo só.
 O app de cotação precisa dos dois assets ao lado — as referências são relativas

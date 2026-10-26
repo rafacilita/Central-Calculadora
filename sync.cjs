@@ -18,16 +18,35 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 
-const ONEDRIVE = "C:/Users/mgfv6541/OneDrive - CVC Brasil Operadora e Agencia de Viagens S.A/Documentos";
-const SRC_COTACAO = path.join(ONEDRIVE, "Calc Cotação/rextur-cotacao");
-const SRC_REEMISSAO = path.join(ONEDRIVE, "Calculadora Reemissão/dev-fxo/index-dev.html");
+// As duas fontes moram juntas em "Central Calculadora" desde 23/10/2026 (antes:
+// "Calc Cotação/rextur-cotacao" e "Calculadora Reemissão").
+const CENTRAL = "C:/Users/mgfv6541/OneDrive - CVC Brasil Operadora e Agencia de Viagens S.A/Documentos/Central Calculadora";
+const REPO_COTACAO = path.join(CENTRAL, "cotacao");
+const REPO_REEMISSAO = path.join(CENTRAL, "reemissao");
+const SRC_COTACAO = REPO_COTACAO;
+const SRC_REEMISSAO = path.join(REPO_REEMISSAO, "dev-fxo/index-dev.html");
 const DEST = __dirname;
 const MARCA = "consolidacao:inject";
 
 function fail(msg) {
   console.error("\nERRO: " + msg);
   process.exit(1);
+}
+
+/* O sync le o arquivo do DISCO. Se a fonte estiver em outra branch (ex.: uma
+ * refatoracao com PR ainda aberto) ou com alteracao nao commitada, isso iria ao ar
+ * sem revisao. Entao so publica a partir da branch publicada, com a fonte limpa. */
+function exigeFontePublicada(repo, branch, arquivos) {
+  const git = (...args) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
+  const atual = git("rev-parse", "--abbrev-ref", "HEAD");
+  if (atual !== branch) {
+    fail(`${repo} esta na branch "${atual}"; o sync so publica a partir de "${branch}".\n` +
+      `       Rode: git -C "${repo}" checkout ${branch}`);
+  }
+  const sujos = git("status", "--porcelain", "--", ...arquivos);
+  if (sujos) fail(`fonte com alteracao nao commitada em ${repo}:\n${sujos}`);
 }
 
 function rel(p) {
@@ -130,6 +149,9 @@ for (const f of [
 ]) {
   if (!fs.existsSync(f)) fail(`fonte nao encontrada: ${f}`);
 }
+
+exigeFontePublicada(REPO_COTACAO, "main", ["index.html", "logo-rextur.png", "icone.jpg"]);
+exigeFontePublicada(REPO_REEMISSAO, "master", ["dev-fxo/index-dev.html"]);
 
 console.log("Assets e favicon:");
 copiaExata(path.join(SRC_COTACAO, "logo-rextur.png"), path.join(DEST, "cotacao/logo-rextur.png"));
