@@ -1396,6 +1396,1409 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
   <script>
 
+    // ----- core: formatacao, numero, codificacao (puro, sem DOM) -----
+function round2(n){
+      const x = Number(n || 0);
+      return Math.round((x + Number.EPSILON) * 100) / 100;
+    }
+function brToHtml(s){
+      return (s || "").trim()
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+        .replace(/\n/g,"<br/>");
+    }
+function parseBRNumber(v){
+      if(v === null || v === undefined) return 0;
+      let s = String(v).trim();
+      // normaliza diferentes caracteres de sinal (ex.: U+2212) para o hífen padrão
+      s = s.replace(/[\u2212\u2013\u2014]/g, "-");
+      if(!s) return 0;
+      let x = s.replace(/[^\d,.\-]/g, "");
+      if(x.includes(".") && x.includes(",")){
+        x = x.replace(/\./g,"").replace(",",".");
+      }else{
+        x = x.replace(",",".");
+      }
+      const n = parseFloat(x);
+      return Number.isFinite(n) ? n : 0;
+    }
+function fmtBRL(n, useEn){
+      return new Intl.NumberFormat(useEn ? "en-US" : "pt-BR", {style:"currency", currency:"BRL"}).format(n || 0);
+    }
+function safeCurrency(code){
+      const c = String(code || "USD").toUpperCase().replace(/[^A-Z]/g,"").slice(0,3);
+      return c.length === 3 ? c : "USD";
+    }
+function fmtNumPT(n){
+      const x = Number(n);
+      const v = Number.isFinite(x) ? x : 0;
+      return new Intl.NumberFormat("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2}).format(v);
+    }
+function fmtNumPT4(n){
+      const x = Number(n);
+      const v = Number.isFinite(x) ? x : 0;
+      return new Intl.NumberFormat("pt-BR", {minimumFractionDigits:4, maximumFractionDigits:4}).format(v);
+    }
+function _bcbDateParam(d){
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      const dd = String(d.getDate()).padStart(2,"0");
+      return `${mm}-${dd}-${d.getFullYear()}`;
+    }
+function _todayKey(d){ return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
+function escapeHtml(s){
+      return String(s || "")
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+    }
+function ciaFullNameForAgency(ciaRaw){
+      const c = String(ciaRaw || "").trim();
+      const u = c.toUpperCase();
+      if(u === "AD" || u === "AZUL") return "Azul";
+      if(u === "LA" || u === "LATAM") return "LATAM";
+      if(u === "G3" || u === "GOL") return "GOL";
+      return c;
+    }
+function escAttr(s){
+      // safer for RF-ish environments
+      return escapeHtml(s).replace(/`/g,"");
+    }
+function normalizePaxName(name){
+      return (name || "").toString().trim().toUpperCase();
+    }
+function normalizePaxNameInput(name){
+      return (name || "").toString().toUpperCase();
+    }
+function minifyRF(h){
+      return String(h || "")
+        .replace(/[\r\n]+/g, "")
+        .replace(/>\s+</g, "><")
+        .trim();
+    }
+function ensureTicketHyphen(s){
+      let out = String(s || "").trim();
+      out = out.replace(/(\d{3})\s*-\s*(\d{10})/g, "$1-$2");
+      out = out.replace(/\b(\d{3})\s*(\d{10})\b/g, "$1-$2");
+      return out;
+    }
+function joinTicketOac(tks, oac){
+      const a = String(tks || "").trim();
+      const b = String(oac || "").trim();
+      if(a && b) return `${a} / ${b}`;
+      return a || b || "";
+    }
+function toIntSafe(v){
+      const n = parseInt(String(v ?? "").replace(/[^\d]/g,""), 10);
+      return Number.isFinite(n) ? n : 0;
+    }
+function reconcileArray(arr, n){
+      const out = [];
+      for(let i=0;i<n;i++){
+        const cur = arr && arr[i] ? arr[i] : {};
+        out.push({
+          name: normalizePaxName(cur.name || ""),
+          ticket: ensureTicketHyphen(String(cur.ticket || "")),
+        });
+      }
+      return out;
+    }
+function chunk4(s){
+      const m = String(s || "").match(/.{1,4}/g);
+      return m ? m.join("-") : "";
+    }
+function cleanB64Url(s){
+      // mantém os caracteres válidos do base64url (inclui '-' e '_')
+      return String(s || "")
+        .replace(/\s+/g,"")
+        .replace(/[^A-Za-z0-9\-_]/g,"");
+    }
+function dechunkLegacy4(s){
+      // remove SOMENTE os separadores inseridos pelo chunk4 (um '-' após cada bloco de 4 chars),
+      // preservando '-' legítimo do base64url dentro do conteúdo.
+      const x = cleanB64Url(s);
+      let out = "";
+      let cnt = 0;
+      for(let i=0;i<x.length;i++){
+        const ch = x[i];
+        if(ch === "-" && cnt === 4){ cnt = 0; continue; } // separador
+        out += ch;
+        cnt++;
+        if(cnt > 4){ cnt = 1; } // segurança (se vier sem separador)
+      }
+      return out;
+    }
+function b64UrlEncode(str){
+      const b64 = btoa(unescape(encodeURIComponent(String(str || ""))));
+      return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    }
+function b64UrlDecode(b64url){
+      let b64 = String(b64url || "").replace(/-/g,"+").replace(/_/g,"/");
+      while(b64.length % 4) b64 += "=";
+      return decodeURIComponent(escape(atob(b64)));
+    }
+function _compactNumberMaybe(s){
+      if(typeof s !== "string") return null;
+      let x = s.trim();
+      x = x.replace(/[\u2212\u2013\u2014]/g, "-");
+      if(!x) return null;
+      // aceita "300", "300.5", "300,50", "1.234,56"
+      if(x.includes(",") && x.includes(".")){ x = x.replace(/\./g,"").replace(",","."); }
+      else if(x.includes(",") && !x.includes(".")){ x = x.replace(",","."); }
+      if(!/^[-+]?\d+(?:\.\d+)?$/.test(x)) return null;
+      const n = Number(x);
+      if(!isFinite(n)) return null;
+      return n;
+    }
+function buildEmailSectionBlock(title, content, opts){
+      const o = opts || {};
+      const strong = !!o.strong;
+      const isHtml = !!o.html;
+      const useMono = o.mono !== false;
+      const value = String(content || "").trim();
+      const emptyHtml = `<span style="color:#999">${escapeHtml(o.emptyLabel || "-")}</span>`;
+      const bodyHtml = isHtml ? (value || emptyHtml) : (value ? brToHtml(value) : emptyHtml);
+      const headerBg = strong ? "#6d28d9" : "#efe8ff";
+      const headerColor = strong ? "#ffffff" : "#4c1d95";
+      const bodyBg = strong ? "#f7f3ff" : "#fbf9ff";
+      const border = strong ? "#d9c8f2" : "#e4daf8";
+      const marginTop = strong ? 22 : 18;
+      const bodyFont = useMono ? 'Consolas, &quot;Courier New&quot;, monospace' : 'Arial, sans-serif';
+      const bodyFontSize = useMono ? '14px' : '13px';
+      const bodyLineHeight = useMono ? '1.55' : '1.5';
+      const extraBodyStyle = o.bodyStyle ? `; ${o.bodyStyle}` : '';
+      return `
+        <table border="0" cellspacing="0" cellpadding="0" width="760" style="width:760px; max-width:760px; margin:${marginTop}px 0 0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse;">
+          <tr>
+            <td style="padding:0;">
+              <div style="padding:10px 12px; background:${headerBg}; color:${headerColor}; font-weight:900; border-radius:12px; letter-spacing:.3px; border:${strong ? 'none' : '1px solid ' + border};">${escapeHtml(title)}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 0 0;">
+              <div style="padding:14px 14px; border:1px solid ${border}; border-radius:12px; background:${bodyBg}; font-family:${bodyFont}; font-size:${bodyFontSize}; line-height:${bodyLineHeight}${extraBodyStyle}">${bodyHtml}</div>
+            </td>
+          </tr>
+        </table>
+      `.trim();
+    }
+function buildOpTitle(mode, c){
+  const base = mode === "NAC" ? "OP (RF) — REEMISSÃO NAC" : "OP (RF) — REEMISSÃO INTER";
+  const loc = (c && c.loc) ? String(c.loc).trim() : "";
+  const cia = (c && c.cia) ? String(c.cia).trim() : "";
+  const extra = `${loc ? " • LOC: " + loc : ""}${cia ? " • CIA: " + cia : ""}`;
+  return base + extra;
+}
+function stripHtml(html){
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      return (tmp.innerText || tmp.textContent || "").trim();
+    }
+    // ----- core: parsers de FXO/PNR (puro, sem DOM) -----
+    // Unica ligeiramente impura por design: resolveFxoCurrency recebe o cambio
+    // atual como parametro em vez de ler o DOM - quem chama (applyFxForType, na
+    // UI) decide se escreve de volta o valor inferido.
+    const ISO_CURRENCIES = new Set(["USD","EUR","GBP","BRL","CAD","CHF","JPY","AUD","ARS","CLP","MXN","COP","PEN","UYU","PYG","CNY","AED","SGD","NZD","ZAR"]);
+function normalizeGdsText(raw){
+        let text = String(raw || "").replace(/\r/g, "\n");
+        text = text.replace(/\n{2,}/g, "\n");
+        text = text.replace(/[‐‑‒–—−]/g, "-");
+        text = text.replace(/^\s*(?:\)>|>+)\s*$/gmi, "");
+        text = text.replace(/^\s*md\s*$/gmi, "");
+        text = text.replace(/^\s*see\s+rtsvc\s*$/gmi, "");
+        text = splitInlinePassengerLines(text);
+        const lines = text.split(/\n/).map(x=>x.replace(/[\t ]+$/g,"")).filter((line,idx,arr)=>!(line==="" && arr[idx-1]===""));
+        return { raw:String(raw||""), text: lines.join("\n"), lines };
+      }
+function splitInlinePassengerLines(text){
+        return String(text||"")
+          .replace(/([^\n])\s+(?=(\d{1,2})\.)/g, "$1\n")
+          .replace(/(\b(?:MR|MRS|MISS|MSTR|MS)\b(?:\([^\n]*?\))*)\s+(?=(\d{1,2})\.)/gi, "$1\n");
+      }
+function parseLoc(text){
+        const s = String(text || "");
+        let m = s.match(/^\s*RP\/.*?\s+([A-Z0-9]{5,7})\s*$/mi);
+        if(m) return m[1].trim().toUpperCase();
+        m = s.match(/\bLOC\s+([A-Z0-9]{5,7})\b/i);
+        if(m) return m[1].trim().toUpperCase();
+        return "";
+      }
+function normalizePersonName(s){
+        return normalizePaxName(String(s||"").replace(/\s+/g," ").trim());
+      }
+function isDobToken(v){
+        return /^\d{2}[A-Z]{3}\d{2}$/i.test(String(v||"").replace(/\s/g,""));
+      }
+function splitNameTitle(namePart){
+        const raw = String(namePart||"").replace(/\s+/g," ").trim();
+        const m = raw.match(/^(.*?)(?:\s*(MSTR|MISS|MRS|MR|MS|INF))$/i);
+        return {
+          base: normalizePersonName((m && m[1].trim()) ? m[1] : raw),
+          title: (m && m[2]) ? String(m[2]).toUpperCase() : ""
+        };
+      }
+function normalizeFullPaxName(name, type){
+        let s = normalizePersonName(String(name||"").replace(/\([^)]*\)/g,"").replace(/\s*\/\s*/g,"/"));
+        if(!s.includes("/")) return s;
+        const parts = s.split("/");
+        const surname = normalizePersonName(parts.shift() || "");
+        const given = normalizePersonName(parts.join(" "));
+        const nt = splitNameTitle(given);
+        const title = nt.title || (String(type||"").toUpperCase() === "INF" ? "INF" : "");
+        return `${surname}/${nt.base}${title ? " " + title : ""}`.trim();
+      }
+function inferPaxTypeFromQualifiers(groups, raw, fallback){
+        const joined = [...(Array.isArray(groups) ? groups : []), raw || ""].join(" ").toUpperCase();
+        if(/\b(?:CHD|CNN|CHLD|CHILD)\b|\bC\d{2}\b/.test(joined)) return "CHD";
+        const infStandalone = (Array.isArray(groups) ? groups : []).some(g=>/^\s*(?:INF|INFT|INFANT)\s*$/i.test(g));
+        const infRaw = /\b(?:INF|INFT|INFANT)\b/i.test(String(raw||"")) && !/\bINF\s*\//i.test(joined);
+        if(infStandalone || infRaw) return "INF";
+        return fallback || "ADT";
+      }
+function splitTopLevelSlash(s){
+        const out = [];
+        let cur = "";
+        let depth = 0;
+        for(const ch of String(s||"")){
+          if(ch === "(") depth++;
+          if(ch === ")" && depth > 0) depth--;
+          if(ch === "/" && depth === 0){
+            out.push(cur);
+            cur = "";
+          }else{
+            cur += ch;
+          }
+        }
+        out.push(cur);
+        return out.map(x=>x.trim()).filter(Boolean);
+      }
+function findCommandTailEnd(src, start, maxEnd){
+        let end = Math.min(maxEnd || src.length, src.length);
+        const nl = src.indexOf("\n", start);
+        if(nl >= 0) end = Math.min(end, nl);
+        const tail = src.slice(start, end);
+        const stop = tail.search(/\b(?:AP|RF|TK|TKTL|TKOK|SS|SR|OS|RM|RC|OP|ET|IG|ER)\b/i);
+        if(stop >= 0) end = start + stop;
+        return end;
+      }
+function parseNameCommandPassengers(text){
+        const src = String(text||"")
+          .toUpperCase()
+          .replace(/\r/g,"\n")
+          .replace(/[ \t]*\/[ \t]*/g,"/")
+          .replace(/[ \t]*\([ \t]*/g,"(")
+          .replace(/[ \t]*\)[ \t]*/g,")");
+        const re = /\bNM\s*(\d{1,2})([A-Z][A-Z '\-]{1,35})\//g;
+        const matches = Array.from(src.matchAll(re));
+        const out = [];
+        let seatIdx = 1;
+        let infIdx = 9000;
+        for(let i=0;i<matches.length;i++){
+          const m = matches[i];
+          const count = parseInt(m[1], 10) || 1;
+          const surname = normalizePersonName(m[2]);
+          const start = m.index + m[0].length;
+          const next = matches[i+1] ? matches[i+1].index : src.length;
+          const end = findCommandTailEnd(src, start, next);
+          const tail = src.slice(start, end);
+          const parts = splitTopLevelSlash(tail);
+          let used = 0;
+          for(const part of parts){
+            if(used >= count) break;
+            const groups = Array.from(part.matchAll(/\(([^)]*)\)/g)).map(x=>String(x[1]||"").trim());
+            const clean = normalizePersonName(part.replace(/\([^)]*\)/g,""));
+            if(!clean || !/[A-Z]/.test(clean)) continue;
+            const type = inferPaxTypeFromQualifiers(groups, clean, "ADT");
+            const idx = seatIdx++;
+            out.push({idx, type, name: normalizeFullPaxName(`${surname}/${clean}`, type), source:"NM"});
+            used++;
+            for(const g of groups){
+              if(!/^\s*INF(?:T|ANT)?\s*\//i.test(g)) continue;
+              out.push({idx:infIdx++, type:"INF", name:parseInfName(g, `${surname}/${clean}`), source:"NM_INF_INLINE", linkedTo:idx});
+            }
+          }
+        }
+        return out;
+      }
+function parseInfName(rawInf, adultName){
+        const adultSurname = normalizePersonName(String(adultName||"").split("/")[0] || "");
+        let s = String(rawInf||"").trim();
+        s = s.replace(/^\s*INF(?:ANT)?/i, "").replace(/^\//, "").trim();
+        const parts = s.split("/").map(x=>x.trim()).filter(Boolean);
+        while(parts.length && isDobToken(parts[parts.length-1])) parts.pop();
+        if(parts.length >= 2){
+          const sn = normalizePersonName(parts[0] || adultSurname);
+          const tail = splitNameTitle(parts[1]);
+          return `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
+        }
+        const tail = splitNameTitle(parts[0] || "INFANT");
+        const sn = adultSurname || "";
+        return `${sn ? sn + "/" : ""}${tail.base} ${tail.title||"INF"}`.trim();
+      }
+function parsePassengersData(text){
+        const norm = normalizeGdsText(text);
+        const pax = [];
+        const warnings = [];
+        let confidence = 0;
+        const loc = parseLoc(norm.text);
+        const seen = new Set();
+        let nextInfIdx = 9000;
+
+        function addPax(idx, type, name, extra){
+          const t = String(type||"").toUpperCase();
+          if(!["ADT","CHD","INF"].includes(t)) return;
+          const nm = normalizeFullPaxName(name, t);
+          if(!nm) return;
+          const linkKey = extra && Number.isFinite(extra.linkedTo) ? `L${extra.linkedTo}` : `I${Number(idx)||0}`;
+          const key = `${linkKey}|${t}|${nm}`;
+          if(seen.has(key)) return;
+          seen.add(key);
+          pax.push(Object.assign({idx:Number(idx)||0, type:t, name:nm}, extra||{}));
+        }
+
+        const commandPax = parseNameCommandPassengers(norm.text);
+        for(const p of commandPax){
+          addPax(p.idx, p.type, p.name, {source:p.source, linkedTo:p.linkedTo});
+          confidence += p.type === "INF" ? 8 : 10;
+        }
+
+        for(const line of norm.lines){
+          const pm = line.match(/^\s*(\d+)\.\s*(.+)$/);
+          if(!pm) continue;
+          const idx = parseInt(pm[1],10);
+          const rest = pm[2] || "";
+          const namePart = (rest.split("(")[0] || rest).trim();
+          if(!/\//.test(namePart)) continue;
+          const groups = Array.from(rest.matchAll(/\(([^)]*)\)/g)).map(m=>String(m[1]||"").trim());
+          let type = inferPaxTypeFromQualifiers(groups, rest, "ADT");
+          addPax(idx, type, namePart, {source:"PNR"});
+          confidence += 12;
+
+          for(const g of groups){
+            if(!/^\s*INF(?:T|ANT)?/i.test(g) || /^\s*(?:INF|INFT|INFANT)\s*$/i.test(g)) continue;
+            addPax(nextInfIdx++, "INF", parseInfName(g, namePart), {source:"INF_INLINE", linkedTo:idx});
+            confidence += 8;
+          }
+        }
+
+        const chdRefs = new Set();
+        for(const line of norm.lines){
+          for(const m of line.matchAll(/\bS(?:SR|R)\s+CHLD\b.*?\/P(\d+)/ig)){
+            chdRefs.add(parseInt(m[1],10));
+          }
+        }
+        if(chdRefs.size){
+          for(const p of pax){
+            if(chdRefs.has(Number(p.idx)) && p.type !== "INF"){
+              p.type = "CHD";
+              p.source = `${p.source || "PNR"}+SSR_CHLD`;
+              confidence += 6;
+            }
+          }
+        }
+
+        // SSR INFT fallback
+        for(const line of norm.lines){
+          let m = line.match(/\bS(?:SR|R)\s+INFT\b\s*-?\s*([A-Z][A-Z '\-]+)\/(.+?)(?:\s+|\/)(\d{2}[A-Z]{3}\d{2}).*?\/P(\d+)/i);
+          if(m){
+            const sn = normalizePersonName(m[1]);
+            const tail = splitNameTitle(m[2]);
+            const full = `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
+            addPax(nextInfIdx++, "INF", full, {source:"SSR_INFT", linkedTo:parseInt(m[4],10), dob:m[3]});
+            confidence += 10;
+            continue;
+          }
+          m = line.match(/\bS(?:SR|R)\s+INFT\b\s*-?\s*([A-Z][A-Z '\-]+)\/([^\/\s]+(?:\s+(?:MSTR|MISS|MRS|MR|MS))?).*?\/P(\d+)/i);
+          if(m){
+            const sn = normalizePersonName(m[1]);
+            const tail = splitNameTitle(m[2]);
+            const full = `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
+            addPax(nextInfIdx++, "INF", full, {source:"SSR_INFT", linkedTo:parseInt(m[3],10)});
+            confidence += 8;
+          }
+        }
+
+        const finalSeen = new Set();
+        for(let i=pax.length-1;i>=0;i--){
+          const p = pax[i] || {};
+          const linkKey = Number.isFinite(p.linkedTo) ? `L${p.linkedTo}` : `I${Number(p.idx)||0}`;
+          const key = `${linkKey}|${p.type}|${p.name}`;
+          if(finalSeen.has(key)) pax.splice(i,1);
+          else finalSeen.add(key);
+        }
+
+        pax.sort((a,b)=>{
+          const av = a.linkedTo ? a.linkedTo + 0.5 : a.idx;
+          const bv = b.linkedTo ? b.linkedTo + 0.5 : b.idx;
+          return av-bv;
+        });
+
+        const qty = {ADT:0, CHD:0, INF:0};
+        pax.forEach(p=>qty[p.type] = (qty[p.type]||0)+1);
+        if(!pax.length) warnings.push("Nenhum passageiro identificado na máscara.");
+        if(pax.length && !loc) warnings.push("LOC não identificado na máscara.");
+
+        return { loc, pax, qty, warnings, confidence: Math.max(0, Math.min(100, confidence)) };
+      }
+function parseSegments(text){
+        const norm = normalizeGdsText(text);
+        const segs = [];
+        const seen = new Set();
+        function add(seg){
+          const key = `${seg.carrier}|${seg.flight}|${seg.date}|${seg.origin}|${seg.destination}|${seg.dep}`;
+          if(seen.has(key)) return;
+          seen.add(key);
+          segs.push(seg);
+        }
+        for(const line of norm.lines){
+          let m = line.match(/^\s*(\d+)\s+([A-Z0-9]{1,3})\s*(\d{1,4})\s+([A-Z])\s+(\d{2}[A-Z]{3})\s+\d\*?([A-Z]{6})\s+[A-Z]{2}\d+\s+(\d{4})\s+(\d{4})\s+(\d{2}[A-Z]{3}).*?(\b\d{1,2}P\b|\bNIL\b|\b0P\b)?/i);
+          if(m){
+            add({ segNo:parseInt(m[1],10), carrier:m[2].toUpperCase(), flight:m[3], bookingClass:m[4].toUpperCase(), date:m[5].toUpperCase(), origin:m[6].slice(0,3).toUpperCase(), destination:m[6].slice(3,6).toUpperCase(), dep:m[7], arr:m[8], arrDate:m[9].toUpperCase(), bag:(m[10]||"").toUpperCase(), source:"PNR" });
+            continue;
+          }
+          m = line.match(/^\s*([A-Z]{3})\s+([A-Z]{3})\s+([A-Z0-9]{1,3})\s+0*(\d{1,4})\s+([A-Z])\s+\*?\s*(\d{2}[A-Z]{3})\s+(\d{4})\s+.+?(\b\d{1,2}P\b|\bNIL\b|\b0P\b)\s*$/i);
+          if(m){
+            add({ segNo:0, carrier:m[3].toUpperCase(), flight:m[4], bookingClass:m[5].toUpperCase(), date:m[6].toUpperCase(), origin:m[1].toUpperCase(), destination:m[2].toUpperCase(), dep:m[7], arr:"", arrDate:"", bag:(m[8]||"").toUpperCase(), source:"FXO" });
+          }
+        }
+        return segs;
+      }
+function parseCurrencyPairs(chunk){
+        const pairs = [];
+        for(const m of String(chunk||"").matchAll(/\b([A-Z]{3})\s+(-?\d+(?:\.\d{1,2})?)/g)){
+          const cur = String(m[1]).toUpperCase();
+          const amt = parseFloat(m[2]);
+          if(cur && ISO_CURRENCIES.has(cur) && Number.isFinite(amt)) pairs.push({cur, amt});
+        }
+        return pairs;
+      }
+function findLabelValue(text, label, preferCur){
+        const src = normalizeGdsText(text).text;
+        const labelsAnchor = '(?:OLD\\s+BASE\\s+FARE|NEW\\s+BASE\\s+FARE|FARE\\s+BALANCE|OLD\\s+TAX|NEW\\s+TAX|TAX\\s+BALANCE|TICKET\\s+DIFFERENCE|PENALTY|GRAND\\s+TOTAL|TOTAL\\s+ADD\\s+COLL|RESIDUAL\\s+VALUE)';
+
+        const lineRe = new RegExp('^\\s*' + label + '\\b.*$', 'gim');
+        for(const mLine of src.matchAll(lineRe)){
+          const ownPairs = parseCurrencyPairs(mLine[0]);
+          if(!ownPairs.length) continue;
+          const exactOwn = preferCur ? ownPairs.find(p=>p.cur===preferCur) : null;
+          return exactOwn || ownPairs[ownPairs.length-1] || null;
+        }
+
+        const blockRe = new RegExp('(?:^|\\n)\\s*' + label + '\\b([\\s\\S]*?)(?=\\n\\s*' + labelsAnchor + '\\b|$)', 'gi');
+        for(const mBlock of src.matchAll(blockRe)){
+          const chunk = String(mBlock[0] || '') + '\\n' + String(mBlock[1] || '');
+          const pairs = parseCurrencyPairs(chunk);
+          if(!pairs.length) continue;
+          const exact = preferCur ? pairs.find(p=>p.cur===preferCur) : null;
+          return exact || pairs[pairs.length-1] || null;
+        }
+        return null;
+      }
+function extractFxoSubBlock(text, wantType){
+        const src = String(text||'');
+        if(!src.trim()) return src;
+        const type = String(wantType||'').toUpperCase();
+        const hasTagged = /(^|\n)\s*\[(ADT|CHD|INF)\]\s*$/im.test(src);
+        if(hasTagged){
+          const lines = src.replace(/\r\n?/g,'\n').split('\n');
+          let cur = '';
+          let buf = [];
+          const blocks = {};
+          const flush = ()=>{ if(cur && !blocks[cur]) blocks[cur] = buf.join('\n').trim(); buf = []; };
+          for(const line of lines){
+            const m = line.match(/^\s*\[(ADT|CHD|INF)\]\s*$/i);
+            if(m){ flush(); cur = String(m[1]).toUpperCase(); continue; }
+            if(cur) buf.push(line);
+          }
+          flush();
+          if(blocks[type]) return blocks[type];
+        }
+        return src;
+      }
+function parseFxoBlock(text, wantType){
+        const s = extractFxoSubBlock(text, wantType);
+        const paxType = /\bCHD\b|\/CH\b/i.test(s) ? "CHD" : ((/\(INF\)|\bINF\b|\/IN\b/i.test(s)) && /FARE\s+BALANCE/i.test(s) ? "INF" : "ADT");
+        const oldBase = findLabelValue(s, 'OLD\\s+BASE\\s+FARE');
+        const newBase = findLabelValue(s, 'NEW\\s+BASE\\s+FARE');
+        const fare = findLabelValue(s, 'FARE\\s+BALANCE');
+        const taxBal = findLabelValue(s, 'TAX\\s+BALANCE');
+        const tktDiff = findLabelValue(s, 'TICKET\\s+DIFFERENCE');
+        const pen = findLabelValue(s, 'PENALTY');
+        const grand = findLabelValue(s, 'GRAND\\s+TOTAL');
+        const add = findLabelValue(s, 'TOTAL\\s+ADD\\s+COLL') || grand || tktDiff;
+        const residual = findLabelValue(s, 'RESIDUAL\\s+VALUE');
+        const bagInfo = parseBagFromText(s);
+        const familyInfo = parseFareFamilies(s);
+        const warnings = [];
+        if(!fare) warnings.push('FARE BALANCE não encontrado');
+        if(!pen) warnings.push('PENALTY não encontrado');
+        if(!add) warnings.push('TOTAL ADD COLL não encontrado');
+        let confidence = 0;
+        if(fare) confidence += 35;
+        if(pen) confidence += 20;
+        if(add) confidence += 25;
+        if(familyInfo.text) confidence += 10;
+        if(bagInfo.text) confidence += 10;
+        return { paxType, oldBase, newBase, fare, taxBal, tktDiff, pen, grand, add, residual, bag:bagInfo.text, family:familyInfo.text, familyItems:familyInfo.items, warnings, confidence:Math.min(100,confidence) };
+      }
+const BAG_TOKEN_PATTERN = "(?:NO\\s*BAG(?:GAGE)?|NIL|0\\s*(?:P(?:C)?|K(?:G)?)|\\d{1,2}\\s*P(?:C)?(?:\\s*\\/?\\s*\\d{2}\\s*K(?:G)?)?|\\d{1,2}\\s*X\\s*\\d{2}\\s*K(?:G)?|\\d{2}\\s*K(?:G)?)";
+function normalizeBagToken(raw){
+        const original = String(raw || "").trim();
+        const token = original.toUpperCase().replace(/\s+/g, "").replace(/KG/g, "K");
+        if(!token) return null;
+        if(/^(?:NOBAG(?:GAGE)?|NIL|0P|0PC|0K)$/.test(token)) return {pieces:0, raw:original, label:'Sem bagagem'};
+
+        let m = token.match(/^(\d{1,2})P(?:C)?(?:\/?(\d{2})K)?$/);
+        if(m){
+          const pieces = parseInt(m[1], 10) || 0;
+          const kg = m[2] ? parseInt(m[2], 10) : 0;
+          if(pieces <= 0) return {pieces:0, raw:original, label:'Sem bagagem'};
+          return {pieces, raw:original, label:`${pieces}PC${kg ? '/' + kg + 'kg' : ''}`};
+        }
+        m = token.match(/^(\d{1,2})X(\d{2})K$/);
+        if(m) return {pieces: parseInt(m[1],10) || 0, raw:original, label:`${parseInt(m[1],10)||0}x${parseInt(m[2],10)||0}kg`};
+
+        m = token.match(/^(\d{2})K$/);
+        if(m) return {pieces:null, raw:original, label:`${parseInt(m[1],10)}kg`};
+
+        return null;
+      }
+function extractBagToken(line){
+        const src = String(line || "");
+        const m = src.match(new RegExp("(?:^|\\s)(" + BAG_TOKEN_PATTERN + ")\\s*$", "i"));
+        if(m) return normalizeBagToken(m[1]);
+        // Fallback: linha que fala de bagagem mas tem o token no meio — pega o último.
+        if(/\b(?:BG|BAG|BAGGAGE|ALLOW(?:ANCE)?)\b/i.test(src)){
+          const todos = Array.from(src.matchAll(new RegExp("(?:^|\\s)(" + BAG_TOKEN_PATTERN + ")(?=\\s|$)", "ig")));
+          if(todos.length) return normalizeBagToken(todos[todos.length-1][1]);
+        }
+        return null;
+      }
+function parseBagFromText(text){
+        const s = String(text || "");
+        const lines = normalizeGdsText(s).lines;
+        let inTable = false;
+        let currentOrigin = "";
+        const rows = [];
+
+        for (const rawLine of lines){
+          const line = String(rawLine || "").trim().replace(/\s+/g, " ");
+          if(/AL\s+FLGT\s+BK\s+DATE\s+TIME.*\bBG\b|BAGG?AGE\s+ALLOWANCE|BAG\s+ALLOWANCE/i.test(line)){ inTable = true; continue; }
+          if(!inTable) continue;
+          if(/ORIGIN\s+TRVL\s+CURRENCY|OLD\s+BASE\s+FARE/i.test(line)) break;
+          if(!line) continue;
+
+          const surface = line.match(/^([A-Z]{3})\s+(?:S\s+U\s+R\s+F\s+A\s+C\s+E|ARNK)$/i);
+          if(surface){ currentOrigin = String(surface[1]).toUpperCase(); continue; }
+
+          const loneCity = line.match(/^([A-Z]{3})$/i);
+          if(loneCity){ currentOrigin = String(loneCity[1]).toUpperCase(); continue; }
+
+          const bag = extractBagToken(line);
+          if(!bag) continue;
+
+          // Duas formas de linha: "ORIG DEST CIA VOO ..." (as duas cidades na
+          // própria linha) ou "DEST CIA VOO ..." (origem vem da linha anterior).
+          // O \s+\d depois da cia evita confundir código de cidade com cia.
+          let from = "", to = "";
+          const par = line.match(/^([A-Z]{3})\s+([A-Z]{3})\s+[A-Z0-9]{2}\s+\d/);
+          if(par){
+            from = par[1].toUpperCase();
+            to = par[2].toUpperCase();
+          }else{
+            const destMatch = line.match(/^([A-Z]{3})\b/);
+            if(destMatch){ from = currentOrigin; to = destMatch[1].toUpperCase(); }
+          }
+
+          rows.push({ from, to, pieces: bag.pieces, label: bag.label });
+          if(to) currentOrigin = to;
+        }
+
+        if(!rows.length){
+          if(/\bNIL\b|\b0\s*P(?:C)?\b|\bNO\s*BAG(?:GAGE)?\b/i.test(s)) return {pieces:[0], text:'Sem bagagem', groups:[], routes:[]};
+          return {pieces:[], text:'', groups:[], routes:[]};
+        }
+
+        const uniqLabels = Array.from(new Set(rows.map(r => r.label)));
+        const uniqPieces = Array.from(new Set(rows.map(r => r.pieces)));
+
+        // Franquia igual em tudo: não precisa dizer onde.
+        if(uniqLabels.length === 1){
+          return {
+            pieces: uniqPieces,
+            text: uniqLabels[0],
+            groups: [{ pieces: rows[0].pieces, label: rows[0].label, routes: rows.filter(r=>r.from&&r.to).map(r => `${r.from}-${r.to}`) }],
+            routes: rows
+          };
+        }
+
+        // Franquia varia: apresenta por ROTA (mais legível para a agência).
+        // Se a cadeia origem-destino não fechou — SURFACE/ARNK no meio, ou
+        // máscara sem a cidade de origem — cai para rótulo por segmento.
+        const temRotas = rows.every(r => r.from && r.to);
+        const groups = [];
+        for (const r of rows){
+          const last = groups[groups.length - 1];
+          if(last && last.label === r.label){
+            if(r.from && r.to) last.routes.push(`${r.from}-${r.to}`);
+          }else{
+            groups.push({ pieces: r.pieces, label: r.label, routes: r.from && r.to ? [`${r.from}-${r.to}`] : [] });
+          }
+        }
+
+        const textOut = temRotas
+          ? groups.map(g => `${g.label}: ${g.routes.join(', ')}`).join(' • ')
+          : rows.map((r, i) => `${r.label} (SEG ${i+1})`).join(' • ');
+
+        return { pieces: uniqPieces, text: textOut, groups, routes: rows };
+      }
+function parseFareFamilies(text){
+        const items = Array.from(String(text||"").matchAll(/FARE\s+FAMILY:FC\d+:(\d+(?:-\d+)?):([A-Z0-9]+)/gi)).map(m=>({seg:m[1], fam:String(m[2]).toUpperCase()}));
+        if(!items.length) return {items:[], text:''};
+        const uniq = Array.from(new Set(items.map(x=>x.fam)));
+        if(uniq.length===1) return {items, text:uniq[0]};
+        const parts = [];
+        items.forEach(x=>{ const p = `${x.fam} (SEG ${x.seg})`; if(!parts.includes(p)) parts.push(p); });
+        return {items, text:parts.join(' • ')};
+      }
+function resolveFxoCurrency(parsed, wantCur, fxAtual){
+        const hasAny = (o)=>o && Number.isFinite(o.amt) && o.cur;
+        const fareRaw = parsed.fare, penRaw = parsed.pen, addRaw = parsed.add;
+        const anyBRL = [fareRaw, penRaw, addRaw].some(x=>hasAny(x) && x.cur === 'BRL') && wantCur !== 'BRL';
+        let fx = fxAtual || 0;
+        let inferred = false;
+
+        if(anyBRL && !(fx > 0)){
+          const pairs = [parsed.fare, parsed.taxBal, parsed.residual, parsed.tktDiff, parsed.add].filter(hasAny);
+          const usdPair = pairs.find(x=>x.cur===wantCur && x.amt !== 0);
+          const brlPair = pairs.find(x=>x.cur==='BRL' && x.amt !== 0);
+          if(usdPair && brlPair){
+            fx = Math.abs(brlPair.amt / usdPair.amt);
+            if(fx > 0) inferred = true;
+          }
+        }
+        if(anyBRL && !(fx > 0) && parsed.oldBase && parsed.newBase && parsed.fare && parsed.oldBase.cur===wantCur && parsed.newBase.cur===wantCur && parsed.fare.cur==='BRL'){
+          const diff = parsed.newBase.amt - parsed.oldBase.amt;
+          if(diff > 0){
+            fx = parsed.fare.amt / diff;
+            if(fx > 0) inferred = true;
+          }
+        }
+
+        if(anyBRL && !(fx > 0)) return {canApply:false, needsFx:true, fx:0, inferred:false};
+
+        let curMismatch = false;
+        function toWant(obj){
+          if(!hasAny(obj)) return null;
+          if(obj.cur === 'BRL' && wantCur !== 'BRL') return {cur:wantCur, amt:obj.amt / fx, srcCur:'BRL'};
+          // moeda do FXO diferente da selecionada e não é BRL (não convertemos, só avisamos):
+          // o valor é usado como está (mesmo comportamento de antes), mas agora sinalizado.
+          if(obj.cur !== wantCur) curMismatch = true;
+          return {cur:obj.cur, amt:obj.amt, srcCur:obj.cur};
+        }
+        const result = { canApply:true, needsFx:false, fx:fx||0, inferred, fare:toWant(parsed.fare), pen:toWant(parsed.pen), add:toWant(parsed.add), taxBal:toWant(parsed.taxBal), tktDiff:toWant(parsed.tktDiff) };
+        result.curMismatch = curMismatch;
+        return result;
+      }
+function getAirlineInfoByTicketPrefix(ticket){
+        const raw = ensureTicketHyphen(String(ticket||''));
+        const prefix = raw.slice(0,3);
+        const map = {
+          '001':{code:'AA', name:'American Airlines'},
+          '004':{code:'BV', name:'Blue Panorama'},
+          '006':{code:'DL', name:'Delta Air Lines'},
+          '009':{code:'QD', name:'JC International Airlines (Camboja)'},
+          '014':{code:'AC', name:'Air Canada'},
+          '016':{code:'UA', name:'United Airlines'},
+          '018':{code:'HO', name:'Juneyao Airlines'},
+          '027':{code:'AS', name:'Alaska Airlines'},
+          '030':{code:'VY', name:'Vueling Airlines'},
+          '031':{code:'PW', name:'Precision Air'},
+          '032':{code:'KP', name:'Asky Airlines'},
+          '033':{code:'F7', name:'Darwin Airlines'},
+          '034':{code:'U8', name:'TUS Airways'},
+          '037':{code:'US', name:'US Airways'},
+          '040':{code:'QC', name:'Camair-Co.'},
+          '041':{code:'JQ', name:'Jetstar Airways'},
+          '043':{code:'KA', name:'Dragonair'},
+          '044':{code:'AR', name:'Aerolineas Argentinas'},
+          '045':{code:'LA', name:'LATAM'},
+          '047':{code:'TP', name:'TAP Air Portugal'},
+          '050':{code:'OA', name:'Olympic Air'},
+          '053':{code:'EI', name:'Aer Lingus'},
+          '055':{code:'AZ', name:'Alitalia / ITA legado'},
+          '057':{code:'AF', name:'Air France'},
+          '061':{code:'HM', name:'Air Seychelles'},
+          '063':{code:'SB', name:'Air Caledonie International'},
+          '064':{code:'OK', name:'Czech Airlines'},
+          '065':{code:'SV', name:'Saudia'},
+          '066':{code:'8Q', name:'Onur Air'},
+          '068':{code:'TM', name:'LAM Linhas Aereas de Mocambique'},
+          '071':{code:'ET', name:'Ethiopian Airlines'},
+          '072':{code:'GF', name:'Gulf Air'},
+          '074':{code:'KL', name:'KLM'},
+          '075':{code:'IB', name:'Iberia'},
+          '076':{code:'ME', name:'MEA - Middle East Airlines'},
+          '077':{code:'MS', name:'Egyptair'},
+          '079':{code:'PR', name:'Philippine Airlines'},
+          '080':{code:'LO', name:'LOT Polish Airlines'},
+          '081':{code:'QF', name:'Qantas'},
+          '082':{code:'SN', name:'Brussels Airlines'},
+          '083':{code:'SA', name:'South African Airways'},
+          '086':{code:'NZ', name:'Air New Zealand'},
+          '098':{code:'AI', name:'Air India'},
+          '101':{code:'EN', name:'Air Dolomiti'},
+          '105':{code:'AY', name:'Finnair'},
+          '106':{code:'BW', name:'Caribbean Airlines'},
+          '107':{code:'W4', name:'LC Busre / LC Peru'},
+          '108':{code:'FI', name:'Icelandair'},
+          '110':{code:'UJ', name:'AlMasria Universal Airlines'},
+          '111':{code:'UP', name:'Bahamasair'},
+          '114':{code:'LY', name:'EL AL Israel Airlines'},
+          '115':{code:'JU', name:'Air Serbia'},
+          '117':{code:'SK', name:'SAS'},
+          '124':{code:'AH', name:'Air Algerie'},
+          '125':{code:'BA', name:'British Airways'},
+          '126':{code:'GA', name:'Garuda Indonesia'},
+          '127':{code:'G3', name:'GOL Linhas Aereas'},
+          '128':{code:'UO', name:'Hong Kong Express'},
+          '130':{code:'5F', name:'Flyone'},
+          '131':{code:'JL', name:'Japan Airlines'},
+          '133':{code:'LR', name:'Lineas Aereas Costarricenses'},
+          '134':{code:'AV', name:'Avianca'},
+          '135':{code:'VT', name:'Air Tahiti'},
+          '139':{code:'AM', name:'Aeromexico'},
+          '140':{code:'LI', name:'LIAT'},
+          '141':{code:'FZ', name:'Flydubai'},
+          '145':{code:'UC', name:'LAN Cargo'},
+          '147':{code:'AT', name:'Royal Air Maroc'},
+          '148':{code:'LN', name:'Libyan Airlines'},
+          '149':{code:'LG', name:'Luxair'},
+          '151':{code:'R5', name:'Jordan Aviation'},
+          '154':{code:'IO', name:'Iraero'},
+          '155':{code:'ES', name:'DHL Aviation EEMEA'},
+          '156':{code:'2I', name:'Star Peru'},
+          '157':{code:'QR', name:'Qatar Airways'},
+          '160':{code:'CX', name:'Cathay Pacific'},
+          '168':{code:'UM', name:'Air Zimbabwe'},
+          '169':{code:'HR', name:'Hahn Air'},
+          '171':{code:'FT', name:'FlyEgypt'},
+          '172':{code:'CV', name:'Cargolux'},
+          '173':{code:'HA', name:'Hawaiian Airlines'},
+          '176':{code:'EK', name:'Emirates'},
+          '179':{code:'AJ', name:'Aztec Airways'},
+          '180':{code:'KE', name:'Korean Air'},
+          '184':{code:'4B', name:'Boutique Air'},
+          '185':{code:'7N', name:'Pan Am World Airways Dominicana'},
+          '186':{code:'SW', name:'Air Namibia'},
+          '188':{code:'K6', name:'Cambodia Angkor Air'},
+          '191':{code:'IG', name:'MeridianaFly'},
+          '192':{code:'PY', name:'Surinam Airways'},
+          '193':{code:'IE', name:'Solomon Airlines'},
+          '199':{code:'TU', name:'Tunisair'},
+          '202':{code:'TA', name:'TACA International Airlines'},
+          '205':{code:'NH', name:'All Nippon Airways'},
+          '206':{code:'YE', name:'Yan Air'},
+          '209':{code:'AG', name:'Aruba Airlines'},
+          '214':{code:'PK', name:'Pakistan International Airlines'},
+          '217':{code:'TG', name:'Thai Airways'},
+          '218':{code:'NF', name:'Air Vanuatu'},
+          '220':{code:'LH', name:'Lufthansa'},
+          '228':{code:'UK', name:'TATA SIA Airline (Vistara)'},
+          '229':{code:'KU', name:'Kuwait Airways'},
+          '230':{code:'CM', name:'Copa Airlines'},
+          '232':{code:'MH', name:'Malaysian Airlines System'},
+          '235':{code:'TK', name:'Turkish Airlines'},
+          '238':{code:'IZ', name:'Arkia Israeli Airlines'},
+          '239':{code:'MK', name:'Air Mauritius'},
+          '241':{code:'EL', name:'Ellinair'},
+          '244':{code:'TN', name:'Air Tahiti Nui'},
+          '246':{code:'ST', name:'Germania'},
+          '247':{code:'O6', name:'Oceanair Linhas Aereas'},
+          '249':{code:'S3', name:'Santa Barbara Airlines'},
+          '250':{code:'HY', name:'Uzbekistan Airlines'},
+          '257':{code:'OS', name:'Austrian Airlines'},
+          '258':{code:'MD', name:'Air Madagascar'},
+          '260':{code:'FJ', name:'Fiji Airways'},
+          '262':{code:'U6', name:'Ural Airlines'},
+          '267':{code:'BE', name:'Flybe'},
+          '269':{code:'EQ', name:'TAME'},
+          '279':{code:'B6', name:'JetBlue'},
+          '281':{code:'RO', name:'Tarom'},
+          '285':{code:'RA', name:'Royal Nepal Airlines'},
+          '289':{code:'OM', name:'MIAT Mongolian Airlines'},
+          '294':{code:'T7', name:'Twin Jet'},
+          '297':{code:'CI', name:'China Airlines'},
+          '298':{code:'UT', name:'UTair Aviation'},
+          '307':{code:'WE', name:'Centurion Air Cargo'},
+          '308':{code:'V0', name:'Conviasa'},
+          '312':{code:'6E', name:'IndiGo'},
+          '316':{code:'5N', name:'JSC Nordavia'},
+          '319':{code:'8D', name:'Expo Aviation'},
+          '324':{code:'SC', name:'Shandong Airlines'},
+          '325':{code:'NP', name:'Nile Air'},
+          '328':{code:'DY', name:'Norwegian Air Shuttle'},
+          '331':{code:'S4', name:'SATA International Airlines'},
+          '333':{code:'VO', name:'VLM Airlines'},
+          '334':{code:'FN', name:'Fastjet Airlines'},
+          '347':{code:'WP', name:'Hawaii Island Air'},
+          '355':{code:'E7', name:'Estafeta Carga Aerea'},
+          '356':{code:'C8', name:'Cargolux Italia'},
+          '357':{code:'8G', name:'Fly Mid Africa'},
+          '362':{code:'7R', name:'Rusline'},
+          '365':{code:'W2', name:'Flexflight'},
+          '366':{code:'8H', name:'BH Air'},
+          '369':{code:'5Y', name:'Atlas Air'},
+          '376':{code:'BB', name:'Seaborne Airlines'},
+          '378':{code:'KX', name:'Cayman Airways'},
+          '381':{code:'SM', name:'Air Cairo'},
+          '390':{code:'A3', name:'Aegean Airlines'},
+          '403':{code:'PO', name:'Polar Air Cargo'},
+          '408':{code:'M4', name:'Mistral Air'},
+          '409':{code:'YM', name:'Montenegro Airlines'},
+          '413':{code:'SZ', name:'Air Company Somon Air'},
+          '417':{code:'E6', name:'Bringer Corporation'},
+          '421':{code:'S7', name:'Siberia Airlines'},
+          '425':{code:'DP', name:'Pobeda Airlines'},
+          '427':{code:'TX', name:'Air Caraibes'},
+          '429':{code:'VL', name:'Med View Airlines'},
+          '439':{code:'ZI', name:'Aigle Azur'},
+          '452':{code:'3O', name:'Air Arabia Maroc'},
+          '459':{code:'WB', name:'Rwandair Express'},
+          '460':{code:'EB', name:'Wamos Air'},
+          '464':{code:'Z8', name:'Amaszonas'},
+          '465':{code:'KC', name:'Air Astana'},
+          '467':{code:'T3', name:'Eastern Airways (UK)'},
+          '469':{code:'4M', name:'LAN Argentina'},
+          '474':{code:'NT', name:'Binter Canarias Airlines'},
+          '475':{code:'0B', name:'Blue Air'},
+          '477':{code:'NE', name:'Nesma Airlines'},
+          '478':{code:'XW', name:'NokScoot Airlines'},
+          '479':{code:'ZH', name:'Shenzhen Airlines'},
+          '480':{code:'BM', name:'British Midland Regional'},
+          '489':{code:'W8', name:'Cargojet Airways'},
+          '501':{code:'7L', name:'Silk Way West Airlines'},
+          '502':{code:'7J', name:'Tajik Air'},
+          '512':{code:'RJ', name:'Royal Jordanian Airlines'},
+          '514':{code:'G9', name:'Air Arabia'},
+          '515':{code:'SF', name:'Tassili Airlines'},
+          '526':{code:'WN', name:'Southwest Airlines'},
+          '535':{code:'3J', name:'Jubba Airways'},
+          '544':{code:'LP', name:'LAN Peru'},
+          '547':{code:'2K', name:'AeroGal'},
+          '551':{code:'YU', name:'EuroAtlantic Airways'},
+          '555':{code:'SU', name:'Aeroflot'},
+          '558':{code:'5O', name:'Europe Airpost'},
+          '560':{code:'P3', name:'CargoLogicAir'},
+          '564':{code:'XQ', name:'SunExpress'},
+          '566':{code:'PS', name:'Ukraine International Airlines'},
+          '572':{code:'9U', name:'Air Moldova'},
+          '575':{code:'7C', name:'Coyne Air Limited'},
+          '576':{code:'GG', name:'Sky Lease I'},
+          '577':{code:'AD', name:'Azul Linhas Aereas'},
+          '580':{code:'RU', name:'AirBridgeCargo'},
+          '589':{code:'9W', name:'Jet Airways'},
+          '593':{code:'XY', name:'National Air Service (NAS)'},
+          '598':{code:'HZ', name:'SAT Airlines'},
+          '599':{code:'8M', name:'Myanmar Airways International'},
+          '602':{code:'P9', name:'Peruvian Air Line'},
+          '605':{code:'H2', name:'SKY Airline'},
+          '606':{code:'A9', name:'Georgian Airways'},
+          '607':{code:'EY', name:'Etihad'},
+          '610':{code:'KK', name:'AtlasJet Airlines'},
+          '615':{code:'QY', name:'European Air Transport'},
+          '618':{code:'SQ', name:'Singapore Airlines'},
+          '623':{code:'FB', name:'Bulgaria Air'},
+          '624':{code:'PC', name:'Pegasus Airlines'},
+          '627':{code:'QV', name:'Lao Airlines'},
+          '628':{code:'B2', name:'Belavia'},
+          '629':{code:'MI', name:'SilkAir'},
+          '631':{code:'GL', name:'Air Greenland'},
+          '633':{code:'GQ', name:'Skyexpress'},
+          '636':{code:'BP', name:'Air Botswana'},
+          '637':{code:'B8', name:'Eritrean Airlines'},
+          '643':{code:'KM', name:'Air Malta'},
+          '649':{code:'TS', name:'Air Transat'},
+          '650':{code:'OY', name:'Andes Lineas Aereas'},
+          '652':{code:'RX', name:'Regent Airways'},
+          '653':{code:'JY', name:'Intercaribbean Airlines'},
+          '655':{code:'DV', name:'SCAT Airlines'},
+          '656':{code:'PX', name:'Air Niugini'},
+          '657':{code:'BT', name:'Air Baltic'},
+          '659':{code:'P0', name:'Proflight Commuter Services'},
+          '664':{code:'YC', name:'Yamal Airlines'},
+          '665':{code:'UB', name:'Myanmar National Airlines'},
+          '668':{code:'TR', name:'Scoot'},
+          '672':{code:'BI', name:'Royal Brunei'},
+          '675':{code:'NX', name:'Air Macau'},
+          '688':{code:'BD', name:'Cambodia Bayon Airlines'},
+          '689':{code:'WX', name:'CityJet'},
+          '695':{code:'BR', name:'EVA Air'},
+          '696':{code:'VR', name:'TACV Cabo Verde Airlines'},
+          '699':{code:'UW', name:'Uni-Top Airlines'},
+          '700':{code:'5C', name:'Cargo Airlines Limited'},
+          '701':{code:'WF', name:'Wideroe'},
+          '706':{code:'KQ', name:'Kenya Airways'},
+          '712':{code:'V7', name:'Volotea'},
+          '717':{code:'R7', name:'Aserca Airlines'},
+          '724':{code:'LX', name:'Swiss'},
+          '725':{code:'W3', name:'Arik Air International'},
+          '729':{code:'QT', name:'Tampa Cargo'},
+          '731':{code:'MF', name:'Xiamen Airlines'},
+          '738':{code:'VN', name:'Vietnam Airlines'},
+          '739':{code:'7V', name:'Federal Airlines'},
+          '742':{code:'9V', name:'Avior Airlines'},
+          '745':{code:'AB', name:'Air Berlin'},
+          '758':{code:'FK', name:'Kelowna Flightcraft Air Charter'},
+          '760':{code:'UU', name:'Air Austral'},
+          '767':{code:'RC', name:'Atlantic Airways'},
+          '771':{code:'J2', name:'Azerbaijan Airlines'},
+          '772':{code:'SX', name:'Skywork Airlines'},
+          '774':{code:'FM', name:'Shanghai Airlines'},
+          '781':{code:'MU', name:'China Eastern Airlines'},
+          '783':{code:'E9', name:'Evelop Airlines'},
+          '784':{code:'CZ', name:'China Southern Airlines'},
+          '795':{code:'VA', name:'Virgin Australia'},
+          '796':{code:'BJ', name:'Nouvelair'},
+          '803':{code:'AE', name:'Mandarin Airlines'},
+          '810':{code:'M6', name:'Amerijet International'},
+          '817':{code:'MJ', name:'Mihin Lanka'},
+          '818':{code:'6H', name:'Israir Airlines'},
+          '826':{code:'GS', name:'TianJin Airlines'},
+          '828':{code:'RH', name:'Hong Kong Air Cargo Carrier'},
+          '829':{code:'PG', name:'Bangkok Airways'},
+          '831':{code:'OU', name:'Croatia Airlines'},
+          '836':{code:'NS', name:'Hebei Airlines'},
+          '837':{code:'4O', name:'Interjet'},
+          '838':{code:'WS', name:'WestJet Airlines'},
+          '847':{code:'PN', name:'China West Air Company'},
+          '849':{code:'R3', name:'Air Company Yakutia'},
+          '851':{code:'HX', name:'Hong Kong Airlines'},
+          '859':{code:'8L', name:'Lucky Air'},
+          '861':{code:'MR', name:'Hunnu Air'},
+          '865':{code:'M7', name:'Aerotransportes Mas de Carga'},
+          '876':{code:'3U', name:'Sichuan Airlines'},
+          '880':{code:'HU', name:'Hainan Airlines'},
+          '881':{code:'DE', name:'Condor Flugdienst'},
+          '883':{code:'BU', name:'Compagnie Africaine d\'Aviation'},
+          '887':{code:'ZM', name:'Air Manas'},
+          '898':{code:'JD', name:'Beijing Capital Airlines'},
+          '910':{code:'WY', name:'Oman Air'},
+          '912':{code:'QW', name:'Qingdao Airlines'},
+          '923':{code:'SS', name:'Corsair'},
+          '930':{code:'OB', name:'Boliviana de Aviacion'},
+          '932':{code:'VS', name:'Virgin Atlantic Airways'},
+          '933':{code:'KZ', name:'Nippon Cargo Airlines'},
+          '942':{code:'VW', name:'Transportes Aeromar'},
+          '946':{code:'V4', name:'Vensecar Internacional'},
+          '957':{code:'LA', name:'LATAM'},
+          '961':{code:'LQ', name:'Lanmei Airlines'},
+          '969':{code:'ZA', name:'Sky Angkor Airlines'},
+          '978':{code:'VJ', name:'Vietjet Aviation'},
+          '980':{code:'CE', name:'Chalair Aviation'},
+          '984':{code:'VX', name:'Virgin America'},
+          '988':{code:'OZ', name:'Asiana Airlines'},
+          '992':{code:'D5', name:'DHL Aero Expreso'},
+          '996':{code:'UX', name:'Air Europa'},
+          '997':{code:'BG', name:'Biman Bangladesh Airlines'},
+          '999':{code:'CA', name:'Air China'}
+        };
+        return map[prefix] || null;
+      }
+function canonicalPaxNameForMatch(name){
+        let s = normalizePaxName(String(name||'')).toUpperCase();
+        s = s.replace(/^\s*\d+\.\s*/, '');
+        s = s.replace(/\b(ADT|CHD|INF|CNN|INS|ST)\b/gi, ' ');
+        s = s.replace(/\b(MR|MRS|MISS|MSTR|MST|MS)\b/gi, ' ');
+        s = s.replace(/\s+/g, ' ').trim();
+        const parts = s.split('/');
+        if(parts.length >= 2){
+          const sur = parts[0].trim();
+          const giv = parts.slice(1).join('/').replace(/\//g,' ').replace(/\s+/g,' ').trim();
+          return (sur + '/' + giv).trim();
+        }
+        return s;
+      }
+function paxNameLooseKey(name){
+        return canonicalPaxNameForMatch(name).replace(/[^A-Z0-9]+/g,'');
+      }
+function parseTickets(text){
+        const src = String(text||'');
+        const lines = normalizeGdsText(src).lines;
+        const out = {};
+        const infOut = {};
+        const meta = { loc:'', source:'', airlineInfos:[], tktMasks:[] };
+        let pendingTicket = null;
+        const orphanTickets = [];
+        const grabP = (line)=>{
+          const s = String(line||'');
+          const m = s.match(/\/P(\d+)(?:\D|$)/i);
+          return m ? parseInt(m[1],10) : null;
+        };
+        const grabTicket = (line)=>{
+          const s = String(line||'');
+          let m = s.match(/(?:^|[^\d])(\d{3})-(\d{10})(?:-(\d{2,3}))?(?=[^\d]|$)/);
+          if(m) return ensureTicketHyphen(`${m[1]}-${m[2]}`);
+          m = s.match(/(?:^|[^\d])(\d{13})(?:-(\d{2,3}))?(?=[^\d]|$)/);
+          if(m) return ensureTicketHyphen(m[1]);
+          return null;
+        };
+        const isFaFheLine = (line)=>/(?:^|\s)(?:FA|FHE)\s+(?:PAX|INF)(?:\s|$)/i.test(String(line||''));
+        const isTktMask = /(?:^|\n)\s*TKT-(\d{13})(?:-\d{2,3})?/i.test(src);
+
+        if(isTktMask){
+          meta.source = 'TKT';
+          const blocks = String(src).split(/(?=^\s*TKT-\d{13}(?:-\d{2,3})?)/m).filter(s=>/TKT-\d{13}/i.test(s));
+          for(const block of blocks){
+            const tkm = block.match(/(?:^|\n)\s*TKT-(\d{13})(?:-\d{2,3})?/i);
+            const baseTicket = tkm ? ensureTicketHyphen(tkm[1]) : '';
+            const locm = block.match(/\bLOC-([A-Z0-9]{5,6})\b/i);
+            if(!meta.loc && locm) meta.loc = (locm[1] || '').toUpperCase();
+            let paxName = '';
+            let paxType = '';
+            for(const line of normalizeGdsText(block).lines){
+              const pm = String(line||'').match(/^\s*\d+\.\s*([A-Z][A-Z\s'\/\-]+?)\s+(ADT|CHD|INF)\b/i);
+              if(pm){
+                paxName = normalizePaxName(pm[1]);
+                paxType = (pm[2]||'').toUpperCase();
+                break;
+              }
+            }
+            if(baseTicket){
+              meta.tktMasks.push({
+                ticket: baseTicket,
+                loc: locm ? (locm[1]||'').toUpperCase() : '',
+                name: paxName,
+                type: paxType,
+                canonicalName: canonicalPaxNameForMatch(paxName)
+              });
+            }
+          }
+        }
+
+        for(const line of lines){
+          const isFaFhe = isFaFheLine(line);
+          const isInfLine = /(?:^|\s)(?:FA|FHE)\s+INF(?:\s|$)/i.test(String(line||''));
+          const tk = grabTicket(line);
+          const p = grabP(line);
+          if(isFaFhe && tk && p){
+            if(isInfLine){ infOut[p] = tk; }
+            else { out[p] = tk; }
+            pendingTicket = null;
+            continue;
+          }
+          if(isFaFhe && tk){
+            pendingTicket = {ticket:tk, isInf:isInfLine};
+            if(!orphanTickets.includes(tk)) orphanTickets.push(tk);
+            continue;
+          }
+          if(pendingTicket && p){
+            if(pendingTicket.isInf) infOut[p] = pendingTicket.ticket;
+            else out[p] = pendingTicket.ticket;
+            pendingTicket = null;
+            continue;
+          }
+          if(tk && p && !out[p] && !infOut[p]){
+            if(isInfLine) infOut[p] = tk;
+            else out[p] = tk;
+            continue;
+          }
+        }
+        if(orphanTickets.length === 1 && Object.keys(out).length === 0 && meta.tktMasks.length === 0){
+          out[1] = orphanTickets[0];
+        }
+        const allTickets = [...Object.values(out), ...Object.values(infOut), ...meta.tktMasks.map(x=>x.ticket)].filter(Boolean);
+        const airlineInfos = [...new Map(allTickets.map(tk=>{
+          const info = getAirlineInfoByTicketPrefix(tk);
+          return info ? [info.code, info] : null;
+        }).filter(Boolean)).values()];
+        meta.airlineInfos = airlineInfos;
+        return { mapping: out, infMapping: infOut, meta };
+      }
+    // ----- core: calculo de reemissao NAC/INTER (puro, sem DOM) -----
+    // Recebem os dados ja lidos do formulario (ver readNacInputs/readInterInputs,
+    // na UI) e devolvem o mesmo formato que calcNac()/calcInter() sempre devolveram.
+    function computeNac(data){
+      let total = 0;
+      let paxCount = 0;
+      const rows = [];
+      for(const p of data.perType){
+        const diffFare = p.newFare - p.oldFare;
+        const perPax = diffFare + p.diffTax + p.du + p.pen;
+        total += perPax * p.qty;
+        paxCount += p.qty;
+        rows.push({t:p.t, qty:p.qty, oldFare:p.oldFare, newFare:p.newFare, diffFare, diffTax:p.diffTax, du:p.du, pen:p.pen, perPax, totalTipo: perPax*p.qty});
+      }
+      const totalNet = Math.max(0, total - data.services);
+      const avg = paxCount > 0 ? totalNet / paxCount : 0;
+      return {totalBRL: totalNet, totalBRLGross: total, servicesBRL: data.services, avgBRL: avg, paxCount, rows};
+    }
+
+    function computeInter(data){
+      let totalCur = 0;
+      let paxCount = 0;
+      const rows = [];
+      const { cur, fx, fxUSD } = data;
+      let hasFeeUSD = false;
+
+      for(const p of data.perType){
+        paxCount += p.qty;
+        if(p.feeUSD) hasFeeUSD = true;
+
+        let feeCur = p.feeUSD;
+        if(cur !== "USD"){
+          // converte USD -> CUR via BRL: (USD->BRL)/(CUR->BRL)
+          feeCur = (fx > 0 && fxUSD > 0) ? p.feeUSD * (fxUSD / fx) : 0;
+        }
+
+        const perPax = p.fare + p.tax + p.du + p.pen + feeCur;
+        totalCur += perPax * p.qty;
+        rows.push({t:p.t, qty:p.qty, fare:p.fare, tax:p.tax, du:p.du, pen:p.pen, feeUSD:p.feeUSD, feeCur, perPax, totalTipo: perPax*p.qty});
+      }
+
+      const totalBRL = fx > 0 ? totalCur * fx : 0;
+      const rcNeedsUsdFx = (cur !== "USD" && hasFeeUSD && !(fxUSD > 0));
+      return {totalCur, fx, fxUSD, totalBRL, paxCount, cur, rows, rcNeedsUsdFx};
+    }
+
+    // ----- LZ-String (compactação offline para CRR3) -----
+    // Implementação baseada em lz-string (pieroxy). Usamos apenas compressToEncodedURIComponent / decompressFromEncodedURIComponent.
+    const LZString = (function(){
+      const f = String.fromCharCode;
+      const keyStrUriSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$";
+      const baseReverseDic = {};
+
+      function getBaseValue(alphabet, character) {
+        if(!baseReverseDic[alphabet]) {
+          baseReverseDic[alphabet] = {};
+          for (let i=0; i<alphabet.length; i++) baseReverseDic[alphabet][alphabet.charAt(i)] = i;
+        }
+        return baseReverseDic[alphabet][character];
+      }
+
+      function _compress(uncompressed, bitsPerChar, getCharFromInt) {
+        if (uncompressed == null) return "";
+        let i, value;
+        const context_dictionary = {};
+        const context_dictionaryToCreate = {};
+        let context_c = "";
+        let context_wc = "";
+        let context_w = "";
+        let context_enlargeIn = 2;
+        let context_dictSize = 3;
+        let context_numBits = 2;
+        const context_data = [];
+        let context_data_val = 0;
+        let context_data_position = 0;
+
+        function writeBit(bit){
+          context_data_val = (context_data_val << 1) | bit;
+          if (context_data_position === bitsPerChar - 1) {
+            context_data_position = 0;
+            context_data.push(getCharFromInt(context_data_val));
+            context_data_val = 0;
+          } else {
+            context_data_position++;
+          }
+        }
+        function writeBits(numBits, val){
+          for (i=0;i<numBits;i++){
+            writeBit(val & 1);
+            val >>= 1;
+          }
+        }
+
+        for (let ii=0; ii<uncompressed.length; ii++){
+          context_c = uncompressed.charAt(ii);
+          if (!Object.prototype.hasOwnProperty.call(context_dictionary, context_c)) {
+            context_dictionary[context_c] = context_dictSize++;
+            context_dictionaryToCreate[context_c] = true;
+          }
+
+          context_wc = context_w + context_c;
+          if (Object.prototype.hasOwnProperty.call(context_dictionary, context_wc)) {
+            context_w = context_wc;
+          } else {
+            if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
+              if (context_w.charCodeAt(0) < 256) {
+                writeBits(context_numBits, 0);
+                value = context_w.charCodeAt(0);
+                writeBits(8, value);
+              } else {
+                writeBits(context_numBits, 1);
+                value = context_w.charCodeAt(0);
+                writeBits(16, value);
+              }
+              context_enlargeIn--;
+              if (context_enlargeIn === 0) {
+                context_enlargeIn = Math.pow(2, context_numBits);
+                context_numBits++;
+              }
+              delete context_dictionaryToCreate[context_w];
+            } else {
+              value = context_dictionary[context_w];
+              writeBits(context_numBits, value);
+            }
+
+            context_enlargeIn--;
+            if (context_enlargeIn === 0) {
+              context_enlargeIn = Math.pow(2, context_numBits);
+              context_numBits++;
+            }
+
+            context_dictionary[context_wc] = context_dictSize++;
+            context_w = String(context_c);
+          }
+        }
+
+        if (context_w !== "") {
+          if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
+            if (context_w.charCodeAt(0) < 256) {
+              writeBits(context_numBits, 0);
+              value = context_w.charCodeAt(0);
+              writeBits(8, value);
+            } else {
+              writeBits(context_numBits, 1);
+              value = context_w.charCodeAt(0);
+              writeBits(16, value);
+            }
+            context_enlargeIn--;
+            if (context_enlargeIn === 0) {
+              context_enlargeIn = Math.pow(2, context_numBits);
+              context_numBits++;
+            }
+            delete context_dictionaryToCreate[context_w];
+          } else {
+            value = context_dictionary[context_w];
+            writeBits(context_numBits, value);
+          }
+
+          context_enlargeIn--;
+          if (context_enlargeIn === 0) {
+            context_enlargeIn = Math.pow(2, context_numBits);
+            context_numBits++;
+          }
+        }
+
+        writeBits(context_numBits, 2);
+
+        while (true) {
+          context_data_val = (context_data_val << 1);
+          if (context_data_position === bitsPerChar - 1) {
+            context_data.push(getCharFromInt(context_data_val));
+            break;
+          } else context_data_position++;
+        }
+
+        return context_data.join("");
+      }
+
+      function _decompress(length, resetValue, getNextValue) {
+        const dictionary = [];
+        let next;
+        let enlargeIn = 4;
+        let dictSize = 4;
+        let numBits = 3;
+        let entry = "";
+        const result = [];
+        let i;
+        let w;
+        let bits, resb, maxpower, power;
+        const data = { val: getNextValue(0), position: resetValue, index: 1 };
+
+        for (i=0; i<3; i++) dictionary[i] = i;
+
+        function readBits(nbits){
+          bits = 0;
+          maxpower = Math.pow(2, nbits);
+          power = 1;
+          while (power !== maxpower) {
+            resb = data.val & data.position;
+            data.position >>= 1;
+            if (data.position === 0) {
+              data.position = resetValue;
+              data.val = getNextValue(data.index++);
+            }
+            bits |= (resb > 0 ? 1 : 0) * power;
+            power <<= 1;
+          }
+          return bits;
+        }
+
+        next = readBits(2);
+        switch (next) {
+          case 0:
+            w = f(readBits(8));
+            break;
+          case 1:
+            w = f(readBits(16));
+            break;
+          case 2:
+            return "";
+          default:
+            return null;
+        }
+
+        dictionary[3] = w;
+        result.push(w);
+
+        while (true) {
+          if (data.index > length) return null;
+
+          const c = readBits(numBits);
+
+          switch (c) {
+            case 0:
+              dictionary[dictSize++] = f(readBits(8));
+              next = dictSize - 1;
+              enlargeIn--;
+              break;
+            case 1:
+              dictionary[dictSize++] = f(readBits(16));
+              next = dictSize - 1;
+              enlargeIn--;
+              break;
+            case 2:
+              return result.join("");
+            default:
+              next = c;
+          }
+
+          if (enlargeIn === 0) {
+            enlargeIn = Math.pow(2, numBits);
+            numBits++;
+          }
+
+          if (dictionary[next]) {
+            entry = dictionary[next];
+          } else {
+            if (next === dictSize) entry = w + w.charAt(0);
+            else return null;
+          }
+          result.push(entry);
+
+          dictionary[dictSize++] = w + entry.charAt(0);
+          enlargeIn--;
+
+          w = entry;
+
+          if (enlargeIn === 0) {
+            enlargeIn = Math.pow(2, numBits);
+            numBits++;
+          }
+        }
+      }
+
+      return {
+        compressToEncodedURIComponent: function(input){
+          if (input == null) return "";
+          return _compress(input, 6, function(a){ return keyStrUriSafe.charAt(a); });
+        },
+        decompressFromEncodedURIComponent: function(input){
+          if (input == null) return "";
+          if (input === "") return null;
+          input = input.replace(/ /g, "+");
+          return _decompress(input.length, 32, function(index){ return getBaseValue(keyStrUriSafe, input.charAt(index)); });
+        }
+      };
+    })();
     const PAX_TYPES = ["ADT","CHD","INF"];
 
     // ---------- helpers ----------
@@ -1521,11 +2924,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
     }
 
 // ---------- RENTABILIZAÇÃO por PAX (rateio) ----------
-    function round2(n){
-      const x = Number(n || 0);
-      return Math.round((x + Number.EPSILON) * 100) / 100;
-    }
-
+    
     function getPaxFlatList(){
       const store = getPaxStore();
       const out = [];
@@ -1888,34 +3287,7 @@ function updateRentComputed(mode, calc){
 
 
 
-    function brToHtml(s){
-      return (s || "").trim()
-        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-        .replace(/\n/g,"<br/>");
-    }
-    function parseBRNumber(v){
-      if(v === null || v === undefined) return 0;
-      let s = String(v).trim();
-      // normaliza diferentes caracteres de sinal (ex.: U+2212) para o hífen padrão
-      s = s.replace(/[\u2212\u2013\u2014]/g, "-");
-      if(!s) return 0;
-      let x = s.replace(/[^\d,.\-]/g, "");
-      if(x.includes(".") && x.includes(",")){
-        x = x.replace(/\./g,"").replace(",",".");
-      }else{
-        x = x.replace(",",".");
-      }
-      const n = parseFloat(x);
-      return Number.isFinite(n) ? n : 0;
-    }
-    function fmtBRL(n, useEn){
-      return new Intl.NumberFormat(useEn ? "en-US" : "pt-BR", {style:"currency", currency:"BRL"}).format(n || 0);
-    }
-    function safeCurrency(code){
-      const c = String(code || "USD").toUpperCase().replace(/[^A-Z]/g,"").slice(0,3);
-      return c.length === 3 ? c : "USD";
-    }
-    function getInterCurrency(){
+                    function getInterCurrency(){
       const sel = document.getElementById("inter_cur").value;
       if(sel === "OTHER"){
         return safeCurrency(document.getElementById("inter_cur_other").value);
@@ -1940,16 +3312,6 @@ function fmtUSD(n){
     return `USD ${(n||0).toFixed(2)}`;
   }
 }
-function fmtNumPT(n){
-      const x = Number(n);
-      const v = Number.isFinite(x) ? x : 0;
-      return new Intl.NumberFormat("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2}).format(v);
-    }
-function fmtNumPT4(n){
-      const x = Number(n);
-      const v = Number.isFinite(x) ? x : 0;
-      return new Intl.NumberFormat("pt-BR", {minimumFractionDigits:4, maximumFractionDigits:4}).format(v);
-    }
 
     // ----- Câmbio oficial do dia (BCB PTAX) -----
     const BCB_FX_TIMEOUT_MS = 6000;
@@ -1959,13 +3321,7 @@ function fmtNumPT4(n){
     const BCB_FX_SUPPORTED = ["USD"];
     const BCB_FX_CACHE_KEY = "bcb_fx_cache_v1";
 
-    function _bcbDateParam(d){
-      const mm = String(d.getMonth()+1).padStart(2,"0");
-      const dd = String(d.getDate()).padStart(2,"0");
-      return `${mm}-${dd}-${d.getFullYear()}`;
-    }
-    function _todayKey(d){ return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
-
+        
     async function _fetchBcbVenda(currency, dateObj){
       const dateParam = _bcbDateParam(dateObj);
       const url = currency === "USD"
@@ -2070,42 +3426,13 @@ function fmtNumPT4(n){
       pill.style.borderColor = ok ? "rgba(61,220,151,.45)" : "rgba(255,204,102,.45)";
       pill.style.background = ok ? "rgba(61,220,151,.14)" : "rgba(255,204,102,.12)";
     }
-    function escapeHtml(s){
-      return String(s || "")
-        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
-    }
-    function ciaFullNameForAgency(ciaRaw){
-      const c = String(ciaRaw || "").trim();
-      const u = c.toUpperCase();
-      if(u === "AD" || u === "AZUL") return "Azul";
-      if(u === "LA" || u === "LATAM") return "LATAM";
-      if(u === "G3" || u === "GOL") return "GOL";
-      return c;
-    }
-
-    function escAttr(s){
-      // safer for RF-ish environments
-      return escapeHtml(s).replace(/`/g,"");
-    }
-
-    function normalizePaxName(name){
-      return (name || "").toString().trim().toUpperCase();
-    }
-
+        
+    
+    
     // For typing: keep spaces (do not trim), only uppercase
-    function normalizePaxNameInput(name){
-      return (name || "").toString().toUpperCase();
-    }
+    
 
-
-    function minifyRF(h){
-      return String(h || "")
-        .replace(/[\r\n]+/g, "")
-        .replace(/>\s+</g, "><")
-        .trim();
-    }
-
+    
     function maskRFText(s){
       const el = document.getElementById("rf_mask_numbers");
       const on = el ? el.checked : true;
@@ -2117,25 +3444,9 @@ function fmtNumPT4(n){
       return out;
     }
 
-    function ensureTicketHyphen(s){
-      let out = String(s || "").trim();
-      out = out.replace(/(\d{3})\s*-\s*(\d{10})/g, "$1-$2");
-      out = out.replace(/\b(\d{3})\s*(\d{10})\b/g, "$1-$2");
-      return out;
-    }
-
-    function joinTicketOac(tks, oac){
-      const a = String(tks || "").trim();
-      const b = String(oac || "").trim();
-      if(a && b) return `${a} / ${b}`;
-      return a || b || "";
-    }
-
-    function toIntSafe(v){
-      const n = parseInt(String(v ?? "").replace(/[^\d]/g,""), 10);
-      return Number.isFinite(n) ? n : 0;
-    }
-
+    
+    
+    
     
     function applyPaxTypeVisibility(){
       const adt = Math.max(0, toIntSafe(document.getElementById("paxq_adt")?.value));
@@ -2196,18 +3507,7 @@ function setHiddenQtyAll(adt, chd, inf){
       el.value = JSON.stringify(store);
     }
 
-    function reconcileArray(arr, n){
-      const out = [];
-      for(let i=0;i<n;i++){
-        const cur = arr && arr[i] ? arr[i] : {};
-        out.push({
-          name: normalizePaxName(cur.name || ""),
-          ticket: ensureTicketHyphen(String(cur.ticket || "")),
-        });
-      }
-      return out;
-    }
-
+    
     function renderPaxFields(){
       const adt = Math.max(0, toIntSafe(document.getElementById("paxq_adt")?.value));
       const chd = Math.max(0, toIntSafe(document.getElementById("paxq_chd")?.value));
@@ -2380,41 +3680,7 @@ const store = getPaxStore();
       return warnings;
     }
 
-    function chunk4(s){
-      const m = String(s || "").match(/.{1,4}/g);
-      return m ? m.join("-") : "";
-    }
-    function cleanB64Url(s){
-      // mantém os caracteres válidos do base64url (inclui '-' e '_')
-      return String(s || "")
-        .replace(/\s+/g,"")
-        .replace(/[^A-Za-z0-9\-_]/g,"");
-    }
-    function dechunkLegacy4(s){
-      // remove SOMENTE os separadores inseridos pelo chunk4 (um '-' após cada bloco de 4 chars),
-      // preservando '-' legítimo do base64url dentro do conteúdo.
-      const x = cleanB64Url(s);
-      let out = "";
-      let cnt = 0;
-      for(let i=0;i<x.length;i++){
-        const ch = x[i];
-        if(ch === "-" && cnt === 4){ cnt = 0; continue; } // separador
-        out += ch;
-        cnt++;
-        if(cnt > 4){ cnt = 1; } // segurança (se vier sem separador)
-      }
-      return out;
-    }
-    function b64UrlEncode(str){
-      const b64 = btoa(unescape(encodeURIComponent(String(str || ""))));
-      return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-    }
-    function b64UrlDecode(b64url){
-      let b64 = String(b64url || "").replace(/-/g,"+").replace(/_/g,"/");
-      while(b64.length % 4) b64 += "=";
-      return decodeURIComponent(escape(atob(b64)));
-    }
-    function getStatePayload(){
+                        function getStatePayload(){
       // legado (CRR1/RA1): salva TODOS os campos (fica grande). Mantido só por compatibilidade.
       const data = { v: 1, mode: getActiveMode(), fields: {} };
       for(const el of document.querySelectorAll("input, select, textarea")){
@@ -2485,249 +3751,6 @@ const store = getPaxStore();
     }
 
     
-    // ----- LZ-String (compactação offline para CRR3) -----
-    // Implementação baseada em lz-string (pieroxy). Usamos apenas compressToEncodedURIComponent / decompressFromEncodedURIComponent.
-    const LZString = (function(){
-      const f = String.fromCharCode;
-      const keyStrUriSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$";
-      const baseReverseDic = {};
-
-      function getBaseValue(alphabet, character) {
-        if(!baseReverseDic[alphabet]) {
-          baseReverseDic[alphabet] = {};
-          for (let i=0; i<alphabet.length; i++) baseReverseDic[alphabet][alphabet.charAt(i)] = i;
-        }
-        return baseReverseDic[alphabet][character];
-      }
-
-      function _compress(uncompressed, bitsPerChar, getCharFromInt) {
-        if (uncompressed == null) return "";
-        let i, value;
-        const context_dictionary = {};
-        const context_dictionaryToCreate = {};
-        let context_c = "";
-        let context_wc = "";
-        let context_w = "";
-        let context_enlargeIn = 2;
-        let context_dictSize = 3;
-        let context_numBits = 2;
-        const context_data = [];
-        let context_data_val = 0;
-        let context_data_position = 0;
-
-        function writeBit(bit){
-          context_data_val = (context_data_val << 1) | bit;
-          if (context_data_position === bitsPerChar - 1) {
-            context_data_position = 0;
-            context_data.push(getCharFromInt(context_data_val));
-            context_data_val = 0;
-          } else {
-            context_data_position++;
-          }
-        }
-        function writeBits(numBits, val){
-          for (i=0;i<numBits;i++){
-            writeBit(val & 1);
-            val >>= 1;
-          }
-        }
-
-        for (let ii=0; ii<uncompressed.length; ii++){
-          context_c = uncompressed.charAt(ii);
-          if (!Object.prototype.hasOwnProperty.call(context_dictionary, context_c)) {
-            context_dictionary[context_c] = context_dictSize++;
-            context_dictionaryToCreate[context_c] = true;
-          }
-
-          context_wc = context_w + context_c;
-          if (Object.prototype.hasOwnProperty.call(context_dictionary, context_wc)) {
-            context_w = context_wc;
-          } else {
-            if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
-              if (context_w.charCodeAt(0) < 256) {
-                writeBits(context_numBits, 0);
-                value = context_w.charCodeAt(0);
-                writeBits(8, value);
-              } else {
-                writeBits(context_numBits, 1);
-                value = context_w.charCodeAt(0);
-                writeBits(16, value);
-              }
-              context_enlargeIn--;
-              if (context_enlargeIn === 0) {
-                context_enlargeIn = Math.pow(2, context_numBits);
-                context_numBits++;
-              }
-              delete context_dictionaryToCreate[context_w];
-            } else {
-              value = context_dictionary[context_w];
-              writeBits(context_numBits, value);
-            }
-
-            context_enlargeIn--;
-            if (context_enlargeIn === 0) {
-              context_enlargeIn = Math.pow(2, context_numBits);
-              context_numBits++;
-            }
-
-            context_dictionary[context_wc] = context_dictSize++;
-            context_w = String(context_c);
-          }
-        }
-
-        if (context_w !== "") {
-          if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
-            if (context_w.charCodeAt(0) < 256) {
-              writeBits(context_numBits, 0);
-              value = context_w.charCodeAt(0);
-              writeBits(8, value);
-            } else {
-              writeBits(context_numBits, 1);
-              value = context_w.charCodeAt(0);
-              writeBits(16, value);
-            }
-            context_enlargeIn--;
-            if (context_enlargeIn === 0) {
-              context_enlargeIn = Math.pow(2, context_numBits);
-              context_numBits++;
-            }
-            delete context_dictionaryToCreate[context_w];
-          } else {
-            value = context_dictionary[context_w];
-            writeBits(context_numBits, value);
-          }
-
-          context_enlargeIn--;
-          if (context_enlargeIn === 0) {
-            context_enlargeIn = Math.pow(2, context_numBits);
-            context_numBits++;
-          }
-        }
-
-        writeBits(context_numBits, 2);
-
-        while (true) {
-          context_data_val = (context_data_val << 1);
-          if (context_data_position === bitsPerChar - 1) {
-            context_data.push(getCharFromInt(context_data_val));
-            break;
-          } else context_data_position++;
-        }
-
-        return context_data.join("");
-      }
-
-      function _decompress(length, resetValue, getNextValue) {
-        const dictionary = [];
-        let next;
-        let enlargeIn = 4;
-        let dictSize = 4;
-        let numBits = 3;
-        let entry = "";
-        const result = [];
-        let i;
-        let w;
-        let bits, resb, maxpower, power;
-        const data = { val: getNextValue(0), position: resetValue, index: 1 };
-
-        for (i=0; i<3; i++) dictionary[i] = i;
-
-        function readBits(nbits){
-          bits = 0;
-          maxpower = Math.pow(2, nbits);
-          power = 1;
-          while (power !== maxpower) {
-            resb = data.val & data.position;
-            data.position >>= 1;
-            if (data.position === 0) {
-              data.position = resetValue;
-              data.val = getNextValue(data.index++);
-            }
-            bits |= (resb > 0 ? 1 : 0) * power;
-            power <<= 1;
-          }
-          return bits;
-        }
-
-        next = readBits(2);
-        switch (next) {
-          case 0:
-            w = f(readBits(8));
-            break;
-          case 1:
-            w = f(readBits(16));
-            break;
-          case 2:
-            return "";
-          default:
-            return null;
-        }
-
-        dictionary[3] = w;
-        result.push(w);
-
-        while (true) {
-          if (data.index > length) return null;
-
-          const c = readBits(numBits);
-
-          switch (c) {
-            case 0:
-              dictionary[dictSize++] = f(readBits(8));
-              next = dictSize - 1;
-              enlargeIn--;
-              break;
-            case 1:
-              dictionary[dictSize++] = f(readBits(16));
-              next = dictSize - 1;
-              enlargeIn--;
-              break;
-            case 2:
-              return result.join("");
-            default:
-              next = c;
-          }
-
-          if (enlargeIn === 0) {
-            enlargeIn = Math.pow(2, numBits);
-            numBits++;
-          }
-
-          if (dictionary[next]) {
-            entry = dictionary[next];
-          } else {
-            if (next === dictSize) entry = w + w.charAt(0);
-            else return null;
-          }
-          result.push(entry);
-
-          dictionary[dictSize++] = w + entry.charAt(0);
-          enlargeIn--;
-
-          w = entry;
-
-          if (enlargeIn === 0) {
-            enlargeIn = Math.pow(2, numBits);
-            numBits++;
-          }
-        }
-      }
-
-      return {
-        compressToEncodedURIComponent: function(input){
-          if (input == null) return "";
-          return _compress(input, 6, function(a){ return keyStrUriSafe.charAt(a); });
-        },
-        decompressFromEncodedURIComponent: function(input){
-          if (input == null) return "";
-          if (input === "") return null;
-          input = input.replace(/ /g, "+");
-          return _decompress(input.length, 32, function(index){ return getBaseValue(keyStrUriSafe, input.charAt(index)); });
-        }
-      };
-    })();
-
-
     // ----- CRR4: mesmo conteúdo do CRR3, mas com chaves compactadas (reduz bem o tamanho) -----
     // Mapeia ids de campos -> índice base36 (ex.: "cia" -> "a") antes de compactar.
     //
@@ -2747,20 +3770,7 @@ const store = getPaxStore();
       CRR4_K2ID[k] = id;
     }
 
-    function _compactNumberMaybe(s){
-      if(typeof s !== "string") return null;
-      let x = s.trim();
-      x = x.replace(/[\u2212\u2013\u2014]/g, "-");
-      if(!x) return null;
-      // aceita "300", "300.5", "300,50", "1.234,56"
-      if(x.includes(",") && x.includes(".")){ x = x.replace(/\./g,"").replace(",","."); }
-      else if(x.includes(",") && !x.includes(".")){ x = x.replace(",","."); }
-      if(!/^[-+]?\d+(?:\.\d+)?$/.test(x)) return null;
-      const n = Number(x);
-      if(!isFinite(n)) return null;
-      return n;
-    }
-
+    
     function getStatePayloadV4(){
       const p = getStatePayloadV2(); // base
       const modeStr = String(p.m || p.mode || "NAC").toUpperCase();
@@ -2953,79 +3963,7 @@ function getCRRCodeForEmail(){
     // Compatibilidade: aceitar funções antigas
     function buildRACode(){ return buildCRRCode(); }
     function loadRACode(code){ return loadCRRCode(code); }
-
-
-    // ---------- calculations ----------
-    function calcNac(){
-      let total = 0;
-      let paxCount = 0;
-      const rows = [];
-      for(const t of PAX_TYPES){
-        const qty = intVal(`nac_qty_${t}`);
-        if(qty <= 0) continue;
-        paxCount += qty;
-        const oldFare = val(`nac_old_${t}`);
-        const newFare = val(`nac_new_${t}`);
-        const diffFare = newFare - oldFare;
-        const diffTax  = val(`nac_tax_${t}`);
-        const du       = val(`nac_du_${t}`);
-        const pen      = val(`nac_pen_${t}`);
-        const perPax = diffFare + diffTax + du + pen;
-        total += perPax * qty;
-        rows.push({t, qty, oldFare, newFare, diffFare, diffTax, du, pen, perPax, totalTipo: perPax*qty});
-      }
-      const servicesOn = !!document.getElementById("nac_services_on")?.checked;
-      const services = servicesOn ? val("nac_services_brl") : 0;
-      const totalNet = Math.max(0, total - services);
-      const avg = paxCount > 0 ? totalNet / paxCount : 0;
-      document.getElementById("nac_total_brl").textContent = fmtBRL(totalNet);
-      const _avgEl = document.getElementById("nac_total_avg"); if(_avgEl) _avgEl.textContent = fmtBRL(avg);
-      return {totalBRL: totalNet, totalBRLGross: total, servicesBRL: services, avgBRL: avg, paxCount, rows};
-    }
-
-    function calcInter(){
-  let totalCur = 0;
-  let paxCount = 0;
-  const rows = [];
-  const cur = getInterCurrency();
-  const fx = val("inter_fx"); // 1 CUR -> BRL
-  const fxUSD = val("inter_fx_usd"); // 1 USD -> BRL (para RC)
-  let hasFeeUSD = false;
-
-  for(const t of PAX_TYPES){
-    const qty = intVal(`inter_qty_${t}`);
-    if(qty <= 0) continue;
-    paxCount += qty;
-
-    const fare = val(`inter_fare_${t}`);
-    const tax  = val(`inter_tax_${t}`);
-    const du   = val(`inter_du_${t}`);
-    const pen  = val(`inter_pen_${t}`);
-
-    const feeUSD = val(`inter_fee_${t}`); // RC sempre em USD
-    if(feeUSD) hasFeeUSD = true;
-
-    let feeCur = feeUSD;
-    if(cur !== "USD"){
-      // converte USD -> CUR via BRL: (USD->BRL)/(CUR->BRL)
-      feeCur = (fx > 0 && fxUSD > 0) ? feeUSD * (fxUSD / fx) : 0;
-    }
-
-    const perPax = fare + tax + du + pen + feeCur;
-    totalCur += perPax * qty;
-    rows.push({t, qty, fare, tax, du, pen, feeUSD, feeCur, perPax, totalTipo: perPax*qty});
-  }
-
-  const totalBRL = fx > 0 ? totalCur * fx : 0;
-  document.getElementById("inter_total_cur").textContent = fmtCur(totalCur);
-  document.getElementById("inter_total_brl").textContent = fmtBRL(totalBRL);
-
-  const rcNeedsUsdFx = (cur !== "USD" && hasFeeUSD && !(fxUSD > 0));
-  return {totalCur, fx, fxUSD, totalBRL, paxCount, cur, rows, rcNeedsUsdFx};
-}
-
-// ---------- common ----------
-    function getCommon(){
+function getCommon(){
       return {
         cia: document.getElementById("cia").value.trim(),
         prazo: "Imediato",
@@ -3040,9 +3978,7 @@ function getCRRCodeForEmail(){
         rentab: !!(document.getElementById("rentab") && document.getElementById("rentab").checked),
       };
     }
-
-    
-    function buildPaxTicketPairsHtml(common, isEN){
+function buildPaxTicketPairsHtml(common, isEN){
       // Preferir o cadastro por PAX (Nome/Bilhete) para vincular corretamente.
       const store = getPaxStore();
       const ciaRaw = String(common?.cia || "");      const isNoTicket = /(^|[\s,\/])(?:AD|AZUL)($|[\s,\/])/i.test(ciaRaw.trim());
@@ -3081,40 +4017,7 @@ function getCRRCodeForEmail(){
       }
       return escapeHtml(p || t || "");
     }
-// ---------- email templates (Outlook) ----------
-    function buildEmailSectionBlock(title, content, opts){
-      const o = opts || {};
-      const strong = !!o.strong;
-      const isHtml = !!o.html;
-      const useMono = o.mono !== false;
-      const value = String(content || "").trim();
-      const emptyHtml = `<span style="color:#999">${escapeHtml(o.emptyLabel || "-")}</span>`;
-      const bodyHtml = isHtml ? (value || emptyHtml) : (value ? brToHtml(value) : emptyHtml);
-      const headerBg = strong ? "#6d28d9" : "#efe8ff";
-      const headerColor = strong ? "#ffffff" : "#4c1d95";
-      const bodyBg = strong ? "#f7f3ff" : "#fbf9ff";
-      const border = strong ? "#d9c8f2" : "#e4daf8";
-      const marginTop = strong ? 22 : 18;
-      const bodyFont = useMono ? 'Consolas, &quot;Courier New&quot;, monospace' : 'Arial, sans-serif';
-      const bodyFontSize = useMono ? '14px' : '13px';
-      const bodyLineHeight = useMono ? '1.55' : '1.5';
-      const extraBodyStyle = o.bodyStyle ? `; ${o.bodyStyle}` : '';
-      return `
-        <table border="0" cellspacing="0" cellpadding="0" width="760" style="width:760px; max-width:760px; margin:${marginTop}px 0 0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse;">
-          <tr>
-            <td style="padding:0;">
-              <div style="padding:10px 12px; background:${headerBg}; color:${headerColor}; font-weight:900; border-radius:12px; letter-spacing:.3px; border:${strong ? 'none' : '1px solid ' + border};">${escapeHtml(title)}</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:12px 0 0;">
-              <div style="padding:14px 14px; border:1px solid ${border}; border-radius:12px; background:${bodyBg}; font-family:${bodyFont}; font-size:${bodyFontSize}; line-height:${bodyLineHeight}${extraBodyStyle}">${bodyHtml}</div>
-            </td>
-          </tr>
-        </table>
-      `.trim();
-    }
-    function buildEmailHtmlNac(){
+function buildEmailHtmlNac(){
       const isEN = isAgencyEmailEN();
       const t = isEN ? AGENCY_EMAIL_I18N.en : AGENCY_EMAIL_I18N.pt;
       const common = getCommon();
@@ -3242,8 +4145,7 @@ const regrasExtra = regrasUser ? `<p style="margin:8px 0 0"><b>${t.obs}</b><br/>
         </div>
       `.trim();
     }
-
-    function buildEmailHtmlInter(){
+function buildEmailHtmlInter(){
       const isEN = isAgencyEmailEN();
       const t = isEN ? AGENCY_EMAIL_I18N.en : AGENCY_EMAIL_I18N.pt;
       const common = getCommon();
@@ -3349,22 +4251,11 @@ const regrasExtra = regrasUser ? `<p style="margin:8px 0 0"><b>${t.obs}</b><br/>
         </div>
       `.trim();
     }
-
-    // ---------- RF OBS CODE (HTML simples) ----------
-    function buildOpTitle(mode, c){
-  const base = mode === "NAC" ? "OP (RF) — REEMISSÃO NAC" : "OP (RF) — REEMISSÃO INTER";
-  const loc = (c && c.loc) ? String(c.loc).trim() : "";
-  const cia = (c && c.cia) ? String(c.cia).trim() : "";
-  const extra = `${loc ? " • LOC: " + loc : ""}${cia ? " • CIA: " + cia : ""}`;
-  return base + extra;
-}
-
 function rfHeader(mode){
   // Removido (título agora vai dentro da faixa roxa da tabela)
   return "";
 }
-
-    function buildRfObsNac(){
+function buildRfObsNac(){
       const c = getCommon();
       const calc = calcNac();
 
@@ -3537,9 +4428,7 @@ ${folioRow}
         </table>`
       );
     }
-
-
-    function buildRfObsInter(){
+function buildRfObsInter(){
       const c = getCommon();
       const calc = calcInter();
       const incentivo = document.getElementById("inter_incentivo").value;
@@ -3724,16 +4613,12 @@ ${endossoRow}
         </table>`
       );
     }
-
-
-    function buildRfObsCode(){
+function buildRfObsCode(){
       const mode = getActiveMode();
       const raw = (mode === "NAC") ? buildRfObsNac() : buildRfObsInter();
       return minifyRF(raw);
     }
-
-    // ---------- formulário SICA (rentabilização) ----------
-    function buildSicaFormHtml(){
+function buildSicaFormHtml(){
       const rd = getRentData();
 
       const mode = getActiveMode();
@@ -3869,10 +4754,7 @@ ${endossoRow}
 </div>`;
       return html;
     }
-
-
-    // ---------- subject ----------
-    function suggestedSubject(){
+function suggestedSubject(){
       const isEN = isAgencyEmailEN();
       const t = isEN ? AGENCY_EMAIL_I18N.en : AGENCY_EMAIL_I18N.pt;
       const mode = getActiveMode();
@@ -3882,9 +4764,7 @@ ${endossoRow}
       const cur = getInterCurrency();
       return t.subjectInter(cur, loc, cia);
     }
-
-    // ---------- copy ----------
-    async function copyHtmlToClipboard(html){
+async function copyHtmlToClipboard(html){
       // 1) Melhor opção (quando permitido): ClipboardItem com text/html
       try{
         if(navigator.clipboard && window.ClipboardItem){
@@ -3939,12 +4819,98 @@ ${endossoRow}
 
       return false;
     }
-    function stripHtml(html){
-      const tmp = document.createElement("div");
-      tmp.innerHTML = html;
-      return (tmp.innerText || tmp.textContent || "").trim();
+
+
+
+
+    // ---------- calculations ----------
+    // calcNac()/calcInter() mantêm nome e retorno de sempre; por dentro, cada um
+    // passou a ser um wrapper fino: readXInputs() lê o DOM, computeX() (em
+    // core/40-core-calculo.js, puro) calcula, renderX() escreve o total na tela.
+    function readNacInputs(){
+      const perType = [];
+      for(const t of PAX_TYPES){
+        const qty = intVal(`nac_qty_${t}`);
+        if(qty <= 0) continue;
+        perType.push({
+          t, qty,
+          oldFare: val(`nac_old_${t}`),
+          newFare: val(`nac_new_${t}`),
+          diffTax: val(`nac_tax_${t}`),
+          du: val(`nac_du_${t}`),
+          pen: val(`nac_pen_${t}`),
+        });
+      }
+      const servicesOn = !!document.getElementById("nac_services_on")?.checked;
+      const services = servicesOn ? val("nac_services_brl") : 0;
+      return { perType, services };
     }
 
+    function renderNac(calc){
+      document.getElementById("nac_total_brl").textContent = fmtBRL(calc.totalBRL);
+      const _avgEl = document.getElementById("nac_total_avg"); if(_avgEl) _avgEl.textContent = fmtBRL(calc.avgBRL);
+    }
+
+    function calcNac(){
+      const calc = computeNac(readNacInputs());
+      renderNac(calc);
+      return calc;
+    }
+
+    function readInterInputs(){
+      const perType = [];
+      for(const t of PAX_TYPES){
+        const qty = intVal(`inter_qty_${t}`);
+        if(qty <= 0) continue;
+        perType.push({
+          t, qty,
+          fare: val(`inter_fare_${t}`),
+          tax: val(`inter_tax_${t}`),
+          du: val(`inter_du_${t}`),
+          pen: val(`inter_pen_${t}`),
+          feeUSD: val(`inter_fee_${t}`), // RC sempre em USD
+        });
+      }
+      return {
+        cur: getInterCurrency(),
+        fx: val("inter_fx"), // 1 CUR -> BRL
+        fxUSD: val("inter_fx_usd"), // 1 USD -> BRL (para RC)
+        perType,
+      };
+    }
+
+    function renderInter(calc){
+      document.getElementById("inter_total_cur").textContent = fmtCur(calc.totalCur);
+      document.getElementById("inter_total_brl").textContent = fmtBRL(calc.totalBRL);
+    }
+
+    function calcInter(){
+      const calc = computeInter(readInterInputs());
+      renderInter(calc);
+      return calc;
+    }
+
+// ---------- common ----------
+    
+    
+    // ---------- email templates (Outlook) ----------
+        
+    
+    // ---------- RF OBS CODE (HTML simples) ----------
+    
+
+    
+
+    
+
+    
+    // ---------- formulário SICA (rentabilização) ----------
+    
+
+    // ---------- subject ----------
+    
+    // ---------- copy ----------
+        
     // ---------- UI ----------
     window.__interFinalized = false;
     window.__interPaxReady = false;
@@ -4454,153 +5420,20 @@ document.getElementById("paxq_adt").value = "1";
         if(el) el.textContent = msg || "";
       }
 
-      function normalizeGdsText(raw){
-        let text = String(raw || "").replace(/\r/g, "\n");
-        text = text.replace(/\n{2,}/g, "\n");
-        text = text.replace(/[‐‑‒–—−]/g, "-");
-        text = text.replace(/^\s*(?:\)>|>+)\s*$/gmi, "");
-        text = text.replace(/^\s*md\s*$/gmi, "");
-        text = text.replace(/^\s*see\s+rtsvc\s*$/gmi, "");
-        text = splitInlinePassengerLines(text);
-        const lines = text.split(/\n/).map(x=>x.replace(/[\t ]+$/g,"")).filter((line,idx,arr)=>!(line==="" && arr[idx-1]===""));
-        return { raw:String(raw||""), text: lines.join("\n"), lines };
-      }
-
-      function splitInlinePassengerLines(text){
-        return String(text||"")
-          .replace(/([^\n])\s+(?=(\d{1,2})\.)/g, "$1\n")
-          .replace(/(\b(?:MR|MRS|MISS|MSTR|MS)\b(?:\([^\n]*?\))*)\s+(?=(\d{1,2})\.)/gi, "$1\n");
-      }
-
-      function parseLoc(text){
-        const s = String(text || "");
-        let m = s.match(/^\s*RP\/.*?\s+([A-Z0-9]{5,7})\s*$/mi);
-        if(m) return m[1].trim().toUpperCase();
-        m = s.match(/\bLOC\s+([A-Z0-9]{5,7})\b/i);
-        if(m) return m[1].trim().toUpperCase();
-        return "";
-      }
-
-      function normalizePersonName(s){
-        return normalizePaxName(String(s||"").replace(/\s+/g," ").trim());
-      }
-
-      function splitNameTitle(namePart){
-        const m = String(namePart||"").trim().match(/^(.*?)(?:\s+(MR|MRS|MS|MISS|MSTR|INF))?$/i);
-        return {
-          base: normalizePersonName(m ? m[1] : namePart),
-          title: (m && m[2]) ? String(m[2]).toUpperCase() : ""
-        };
-      }
-
-      function parseInfName(rawInf, adultName){
-        const adultSurname = normalizePersonName(String(adultName||"").split("/")[0] || "");
-        let s = String(rawInf||"").trim();
-        s = s.replace(/^\s*INF(?:ANT)?/i, "").replace(/^\//, "").trim();
-        const parts = s.split("/").map(x=>x.trim()).filter(Boolean);
-        const isDob = (v)=>/^\d{2}[A-Z]{3}\d{2}$/i.test(String(v||"").replace(/\s/g,""));
-        while(parts.length && isDob(parts[parts.length-1])) parts.pop();
-        if(parts.length >= 2){
-          const sn = normalizePersonName(parts[0] || adultSurname);
-          const tail = splitNameTitle(parts[1]);
-          return `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
-        }
-        const tail = splitNameTitle(parts[0] || "INFANT");
-        const sn = adultSurname || "";
-        return `${sn ? sn + "/" : ""}${tail.base} ${tail.title||"INF"}`.trim();
-      }
-
-      function parsePassengersData(text){
-        const norm = normalizeGdsText(text);
-        const pax = [];
-        const warnings = [];
-        let confidence = 0;
-        const loc = parseLoc(norm.text);
-        const seen = new Set();
-        let nextInfIdx = 9000;
-
-        function addPax(idx, type, name, extra){
-          const t = String(type||"").toUpperCase();
-          if(!["ADT","CHD","INF"].includes(t)) return;
-          const nm = normalizePersonName(name);
-          if(!nm) return;
-          const key = `${idx}|${t}|${nm}`;
-          if(seen.has(key)) return;
-          seen.add(key);
-          pax.push(Object.assign({idx:Number(idx)||0, type:t, name:nm}, extra||{}));
-        }
-
-        for(const line of norm.lines){
-          const pm = line.match(/^\s*(\d+)\.\s*(.+)$/);
-          if(!pm) continue;
-          const idx = parseInt(pm[1],10);
-          const rest = pm[2] || "";
-          const namePart = (rest.split("(")[0] || rest).trim();
-          if(!/\//.test(namePart)) continue;
-          const groups = Array.from(rest.matchAll(/\(([^)]*)\)/g)).map(m=>String(m[1]||"").trim());
-          let type = "ADT";
-          if(groups.some(g=>/^\s*CHD\b/i.test(g))) type = "CHD";
-          else if(groups.some(g=>/^\s*ADT\b/i.test(g))) type = "ADT";
-          else if(groups.some(g=>/^\s*INF\s*$/i.test(g))) type = "INF";
-          addPax(idx, type, namePart, {source:"PNR"});
-          confidence += 12;
-
-          for(const g of groups){
-            if(!/^\s*INF/i.test(g) || /^\s*INF\s*$/i.test(g)) continue;
-            addPax(nextInfIdx++, "INF", parseInfName(g, namePart), {source:"INF_INLINE", linkedTo:idx});
-            confidence += 8;
-          }
-        }
-
-        // SSR INFT fallback
-        for(const line of norm.lines){
-          const m = line.match(/SSR\s+INFT\b.*?([A-Z][A-Z '\-]+)\/(.+?)(?:\s+|\/)(\d{2}[A-Z]{3}\d{2}).*?\/P(\d+)/i);
-          if(!m) continue;
-          const sn = normalizePersonName(m[1]);
-          const tail = splitNameTitle(m[2]);
-          const full = `${sn}/${tail.base} ${tail.title||"INF"}`.trim();
-          addPax(nextInfIdx++, "INF", full, {source:"SSR_INFT", linkedTo:parseInt(m[4],10), dob:m[3]});
-          confidence += 10;
-        }
-
-        pax.sort((a,b)=>{
-          const av = a.linkedTo ? a.linkedTo + 0.5 : a.idx;
-          const bv = b.linkedTo ? b.linkedTo + 0.5 : b.idx;
-          return av-bv;
-        });
-
-        const qty = {ADT:0, CHD:0, INF:0};
-        pax.forEach(p=>qty[p.type] = (qty[p.type]||0)+1);
-        if(!pax.length) warnings.push("Nenhum passageiro identificado na máscara.");
-        if(pax.length && !loc) warnings.push("LOC não identificado na máscara.");
-
-        return { loc, pax, qty, warnings, confidence: Math.max(0, Math.min(100, confidence)) };
-      }
-
-      function parseSegments(text){
-        const norm = normalizeGdsText(text);
-        const segs = [];
-        const seen = new Set();
-        function add(seg){
-          const key = `${seg.carrier}|${seg.flight}|${seg.date}|${seg.origin}|${seg.destination}|${seg.dep}`;
-          if(seen.has(key)) return;
-          seen.add(key);
-          segs.push(seg);
-        }
-        for(const line of norm.lines){
-          let m = line.match(/^\s*(\d+)\s+([A-Z0-9]{1,3})\s*(\d{1,4})\s+([A-Z])\s+(\d{2}[A-Z]{3})\s+\d\*?([A-Z]{6})\s+[A-Z]{2}\d+\s+(\d{4})\s+(\d{4})\s+(\d{2}[A-Z]{3}).*?(\b\d{1,2}P\b|\bNIL\b|\b0P\b)?/i);
-          if(m){
-            add({ segNo:parseInt(m[1],10), carrier:m[2].toUpperCase(), flight:m[3], bookingClass:m[4].toUpperCase(), date:m[5].toUpperCase(), origin:m[6].slice(0,3).toUpperCase(), destination:m[6].slice(3,6).toUpperCase(), dep:m[7], arr:m[8], arrDate:m[9].toUpperCase(), bag:(m[10]||"").toUpperCase(), source:"PNR" });
-            continue;
-          }
-          m = line.match(/^\s*([A-Z]{3})\s+([A-Z]{3})\s+([A-Z0-9]{1,3})\s+0*(\d{1,4})\s+([A-Z])\s+\*?\s*(\d{2}[A-Z]{3})\s+(\d{4})\s+.+?(\b\d{1,2}P\b|\bNIL\b|\b0P\b)\s*$/i);
-          if(m){
-            add({ segNo:0, carrier:m[3].toUpperCase(), flight:m[4], bookingClass:m[5].toUpperCase(), date:m[6].toUpperCase(), origin:m[1].toUpperCase(), destination:m[2].toUpperCase(), dep:m[7], arr:"", arrDate:"", bag:(m[8]||"").toUpperCase(), source:"FXO" });
-          }
-        }
-        return segs;
-      }
-
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
       function renderFormattedVoosFromSegments(segs){
         if(!Array.isArray(segs) || !segs.length) return "";
         return segs.map(seg=>`${seg.carrier}${String(seg.flight).padStart(0,"0")} ${seg.bookingClass} ${seg.date} ${seg.origin}${seg.destination} ${seg.dep}${seg.arr?` ${seg.arr}`:""}${seg.arrDate?` ${seg.arrDate}`:""}`.trim()).join("\n");
@@ -4683,219 +5516,29 @@ document.getElementById("paxq_adt").value = "1";
       }
 
       // Restringe a moedas ISO 4217 conhecidas para não confundir com abreviações do GDS
-      // (ex.: "TKT 123", "ADT 1") que também casam no padrão "3 letras + número".
-      const ISO_CURRENCIES = new Set(["USD","EUR","GBP","BRL","CAD","CHF","JPY","AUD","ARS","CLP","MXN","COP","PEN","UYU","PYG","CNY","AED","SGD","NZD","ZAR"]);
-      function parseCurrencyPairs(chunk){
-        const pairs = [];
-        for(const m of String(chunk||"").matchAll(/\b([A-Z]{3})\s+(-?\d+(?:\.\d{1,2})?)/g)){
-          const cur = String(m[1]).toUpperCase();
-          const amt = parseFloat(m[2]);
-          if(cur && ISO_CURRENCIES.has(cur) && Number.isFinite(amt)) pairs.push({cur, amt});
-        }
-        return pairs;
-      }
+      // (ex.: "TKT 123", "ADT 1") que também casam no padrão "3 letras + número".      
+      
+      
+      
 
-      function findLabelValue(text, label, preferCur){
-        const src = normalizeGdsText(text).text;
-        const labelsAnchor = '(?:OLD\\s+BASE\\s+FARE|NEW\\s+BASE\\s+FARE|FARE\\s+BALANCE|OLD\\s+TAX|NEW\\s+TAX|TAX\\s+BALANCE|TICKET\\s+DIFFERENCE|PENALTY|GRAND\\s+TOTAL|TOTAL\\s+ADD\\s+COLL|RESIDUAL\\s+VALUE)';
+      // Reconhecimento do token de bagagem: portado da linhagem 1.0.24c
+      // (Teste_FXO_Calculadora, branch feature/melhorias). O regex anterior só
+      // aceitava "1P"/"0P"/"NIL" e ignorava silenciosamente "1PC", "NO BAG",
+      // "23K" e "1PC/23KG" — com franquia diferente por trecho, lia só os
+      // trechos no formato antigo e declarava franquia uniforme, mandando
+      // bagagem errada no e-mail da agência.
+      
+      // Devolve {pieces, label} ou null se o texto não é um token de bagagem.
+      // pieces === null significa franquia por peso, sem contagem de peças.
+      
+      
+      
 
-        const lineRe = new RegExp('^\\s*' + label + '\\b.*$', 'gim');
-        for(const mLine of src.matchAll(lineRe)){
-          const ownPairs = parseCurrencyPairs(mLine[0]);
-          if(!ownPairs.length) continue;
-          const exactOwn = preferCur ? ownPairs.find(p=>p.cur===preferCur) : null;
-          return exactOwn || ownPairs[ownPairs.length-1] || null;
-        }
-
-        const blockRe = new RegExp('(?:^|\\n)\\s*' + label + '\\b([\\s\\S]*?)(?=\\n\\s*' + labelsAnchor + '\\b|$)', 'gi');
-        for(const mBlock of src.matchAll(blockRe)){
-          const chunk = String(mBlock[0] || '') + '\\n' + String(mBlock[1] || '');
-          const pairs = parseCurrencyPairs(chunk);
-          if(!pairs.length) continue;
-          const exact = preferCur ? pairs.find(p=>p.cur===preferCur) : null;
-          return exact || pairs[pairs.length-1] || null;
-        }
-        return null;
-      }
-
-      function extractFxoSubBlock(text, wantType){
-        const src = String(text||'');
-        if(!src.trim()) return src;
-        const type = String(wantType||'').toUpperCase();
-        const hasTagged = /(^|\n)\s*\[(ADT|CHD|INF)\]\s*$/im.test(src);
-        if(hasTagged){
-          const lines = src.replace(/\r\n?/g,'\n').split('\n');
-          let cur = '';
-          let buf = [];
-          const blocks = {};
-          const flush = ()=>{ if(cur && !blocks[cur]) blocks[cur] = buf.join('\n').trim(); buf = []; };
-          for(const line of lines){
-            const m = line.match(/^\s*\[(ADT|CHD|INF)\]\s*$/i);
-            if(m){ flush(); cur = String(m[1]).toUpperCase(); continue; }
-            if(cur) buf.push(line);
-          }
-          flush();
-          if(blocks[type]) return blocks[type];
-        }
-        return src;
-      }
-
-      function parseFxoBlock(text, wantType){
-        const s = extractFxoSubBlock(text, wantType);
-        const paxType = /\bCHD\b|\/CH\b/i.test(s) ? "CHD" : ((/\(INF\)|\bINF\b|\/IN\b/i.test(s)) && /FARE\s+BALANCE/i.test(s) ? "INF" : "ADT");
-        const oldBase = findLabelValue(s, 'OLD\\s+BASE\\s+FARE');
-        const newBase = findLabelValue(s, 'NEW\\s+BASE\\s+FARE');
-        const fare = findLabelValue(s, 'FARE\\s+BALANCE');
-        const taxBal = findLabelValue(s, 'TAX\\s+BALANCE');
-        const tktDiff = findLabelValue(s, 'TICKET\\s+DIFFERENCE');
-        const pen = findLabelValue(s, 'PENALTY');
-        const grand = findLabelValue(s, 'GRAND\\s+TOTAL');
-        const add = findLabelValue(s, 'TOTAL\\s+ADD\\s+COLL') || grand || tktDiff;
-        const residual = findLabelValue(s, 'RESIDUAL\\s+VALUE');
-        const bagInfo = parseBagFromText(s);
-        const familyInfo = parseFareFamilies(s);
-        const warnings = [];
-        if(!fare) warnings.push('FARE BALANCE não encontrado');
-        if(!pen) warnings.push('PENALTY não encontrado');
-        if(!add) warnings.push('TOTAL ADD COLL não encontrado');
-        let confidence = 0;
-        if(fare) confidence += 35;
-        if(pen) confidence += 20;
-        if(add) confidence += 25;
-        if(familyInfo.text) confidence += 10;
-        if(bagInfo.text) confidence += 10;
-        return { paxType, oldBase, newBase, fare, taxBal, tktDiff, pen, grand, add, residual, bag:bagInfo.text, family:familyInfo.text, familyItems:familyInfo.items, warnings, confidence:Math.min(100,confidence) };
-      }
-
-
-      function parseBagFromText(text){
-        const s = String(text || "");
-        const lines = normalizeGdsText(s).lines;
-        let inTable = false;
-        let currentOrigin = "";
-        const routes = [];
-
-        function bagLabel(n){ return n > 0 ? `${n}PC` : 'Sem bagagem'; }
-        function pushRoute(from, to, pieces){
-          if(!from || !to) return;
-          routes.push({ from, to, pieces, label: bagLabel(pieces) });
-        }
-
-        for (const rawLine of lines){
-          const line = String(rawLine || "").trim().replace(/\s+/g, " ");
-          if(/AL\s+FLGT\s+BK\s+DATE\s+TIME.*BG/i.test(line)){ inTable = true; continue; }
-          if(!inTable) continue;
-          if(/ORIGIN\s+TRVL\s+CURRENCY|OLD\s+BASE\s+FARE/i.test(line)) break;
-          if(!line) continue;
-
-          const surface = line.match(/^([A-Z]{3})\s+(?:S\s+U\s+R\s+F\s+A\s+C\s+E|ARNK)$/i);
-          if(surface){
-            currentOrigin = String(surface[1]).toUpperCase();
-            continue;
-          }
-
-          const loneCity = line.match(/^([A-Z]{3})$/i);
-          if(loneCity){
-            currentOrigin = String(loneCity[1]).toUpperCase();
-            continue;
-          }
-
-          const bagMatch = line.match(/\b(NIL|0P|\d{1,2}P)\s*$/i);
-          if(!bagMatch) continue;
-
-          const destMatch = line.match(/^([A-Z]{3})\b/);
-          if(!destMatch) continue;
-
-          const dest = String(destMatch[1]).toUpperCase();
-          const rawBag = String(bagMatch[1]).toUpperCase();
-          const pieces = /^(?:NIL|0P)$/i.test(rawBag) ? 0 : parseInt(rawBag, 10);
-
-          pushRoute(currentOrigin, dest, pieces);
-          currentOrigin = dest;
-        }
-
-        if(!routes.length){
-          if(/\bNIL\b|\b0P\b/i.test(s)) return {pieces:[0], text:'Sem bagagem', groups:[], routes:[]};
-          return {pieces:[], text:'', groups:[], routes:[]};
-        }
-
-        const uniq = Array.from(new Set(routes.map(r => r.pieces)));
-        if(uniq.length === 1){
-          const only = uniq[0];
-          return {
-            pieces: uniq,
-            text: only > 0 ? `${only}PC` : 'Sem bagagem',
-            groups: [{ pieces: only, routes: routes.map(r => `${r.from}-${r.to}`) }],
-            routes
-          };
-        }
-
-        const groups = [];
-        for (const r of routes){
-          const last = groups[groups.length - 1];
-          const routeLabel = `${r.from}-${r.to}`;
-          if(last && last.pieces === r.pieces){
-            last.routes.push(routeLabel);
-          } else {
-            groups.push({ pieces: r.pieces, routes: [routeLabel] });
-          }
-        }
-
-        const textOut = groups.map(g => `${bagLabel(g.pieces)}: ${g.routes.join(', ')}`).join(' • ');
-        return { pieces: uniq, text: textOut, groups, routes };
-      }
-
-
-      function parseFareFamilies(text){
-        const items = Array.from(String(text||"").matchAll(/FARE\s+FAMILY:FC\d+:(\d+(?:-\d+)?):([A-Z0-9]+)/gi)).map(m=>({seg:m[1], fam:String(m[2]).toUpperCase()}));
-        if(!items.length) return {items:[], text:''};
-        const uniq = Array.from(new Set(items.map(x=>x.fam)));
-        if(uniq.length===1) return {items, text:uniq[0]};
-        const parts = [];
-        items.forEach(x=>{ const p = `${x.fam} (SEG ${x.seg})`; if(!parts.includes(p)) parts.push(p); });
-        return {items, text:parts.join(' • ')};
-      }
-
-      function resolveFxoCurrency(parsed, wantCur){
-        const hasAny = (o)=>o && Number.isFinite(o.amt) && o.cur;
-        const fareRaw = parsed.fare, penRaw = parsed.pen, addRaw = parsed.add;
-        const anyBRL = [fareRaw, penRaw, addRaw].some(x=>hasAny(x) && x.cur === 'BRL') && wantCur !== 'BRL';
-        let fx = parseBRNumber($("inter_fx")?.value);
-        let inferred = false;
-
-        if(anyBRL && !(fx > 0)){
-          const pairs = [parsed.fare, parsed.taxBal, parsed.residual, parsed.tktDiff, parsed.add].filter(hasAny);
-          const usdPair = pairs.find(x=>x.cur===wantCur && x.amt !== 0);
-          const brlPair = pairs.find(x=>x.cur==='BRL' && x.amt !== 0);
-          if(usdPair && brlPair){
-            fx = Math.abs(brlPair.amt / usdPair.amt);
-            if(fx > 0){ inferred = true; if($("inter_fx") && !$("inter_fx").value.trim()) $("inter_fx").value = fmtNumPT4(fx); }
-          }
-        }
-        if(anyBRL && !(fx > 0) && parsed.oldBase && parsed.newBase && parsed.fare && parsed.oldBase.cur===wantCur && parsed.newBase.cur===wantCur && parsed.fare.cur==='BRL'){
-          const diff = parsed.newBase.amt - parsed.oldBase.amt;
-          if(diff > 0){
-            fx = parsed.fare.amt / diff;
-            if(fx > 0){ inferred = true; if($("inter_fx") && !$("inter_fx").value.trim()) $("inter_fx").value = fmtNumPT4(fx); }
-          }
-        }
-
-        if(anyBRL && !(fx > 0)) return {canApply:false, needsFx:true, fx:0, inferred:false};
-
-        let curMismatch = false;
-        function toWant(obj){
-          if(!hasAny(obj)) return null;
-          if(obj.cur === 'BRL' && wantCur !== 'BRL') return {cur:wantCur, amt:obj.amt / fx, srcCur:'BRL'};
-          // moeda do FXO diferente da selecionada e não é BRL (não convertemos, só avisamos):
-          // o valor é usado como está (mesmo comportamento de antes), mas agora sinalizado.
-          if(obj.cur !== wantCur) curMismatch = true;
-          return {cur:obj.cur, amt:obj.amt, srcCur:obj.cur};
-        }
-        const result = { canApply:true, needsFx:false, fx:fx||0, inferred, fare:toWant(parsed.fare), pen:toWant(parsed.pen), add:toWant(parsed.add), taxBal:toWant(parsed.taxBal), tktDiff:toWant(parsed.tktDiff) };
-        result.curMismatch = curMismatch;
-        return result;
-      }
-
+      
+      // Pura: nao le nem escreve DOM. Recebe o cambio atual (fxAtual, 0 se vazio) e
+      // devolve o resultado, incluindo se um novo cambio foi inferido (result.inferred)
+      // e qual (result.fx) - quem chama decide se preenche o campo (ver applyFxForType).
+      
 
       function updateBagSummary(){
         const bagEl = $("bag");
@@ -4947,7 +5590,10 @@ document.getElementById("paxq_adt").value = "1";
         const parsed = parseFxoBlock(ta.value || '', type);
         syncInternoFromBoxes();
         const wantCur = (typeof getInterCurrency === 'function') ? getInterCurrency() : 'USD';
-        const resolved = resolveFxoCurrency(parsed, wantCur);
+        const fxEl = $("inter_fx");
+        const fxAtual = parseBRNumber(fxEl?.value);
+        const resolved = resolveFxoCurrency(parsed, wantCur, fxAtual);
+        if(resolved.inferred && fxEl && !fxEl.value.trim()) fxEl.value = fmtNumPT4(resolved.fx);
         // inter_du_*/inter_fee_* não são preenchidos por este parser — não zerar,
         // senão qualquer edição no FXO apaga silenciosamente o que foi digitado manualmente.
         const fareEl = $(`inter_fare_${type}`), taxEl = $(`inter_tax_${type}`), penEl = $(`inter_pen_${type}`);
@@ -5015,427 +5661,12 @@ document.getElementById("paxq_adt").value = "1";
         }
       }
 
-      function getAirlineInfoByTicketPrefix(ticket){
-        const raw = ensureTicketHyphen(String(ticket||''));
-        const prefix = raw.slice(0,3);
-        const map = {
-          '001':{code:'AA', name:'American Airlines'},
-          '004':{code:'BV', name:'Blue Panorama'},
-          '006':{code:'DL', name:'Delta Air Lines'},
-          '009':{code:'QD', name:'JC International Airlines (Camboja)'},
-          '014':{code:'AC', name:'Air Canada'},
-          '016':{code:'UA', name:'United Airlines'},
-          '018':{code:'HO', name:'Juneyao Airlines'},
-          '027':{code:'AS', name:'Alaska Airlines'},
-          '030':{code:'VY', name:'Vueling Airlines'},
-          '031':{code:'PW', name:'Precision Air'},
-          '032':{code:'KP', name:'Asky Airlines'},
-          '033':{code:'F7', name:'Darwin Airlines'},
-          '034':{code:'U8', name:'TUS Airways'},
-          '037':{code:'US', name:'US Airways'},
-          '040':{code:'QC', name:'Camair-Co.'},
-          '041':{code:'JQ', name:'Jetstar Airways'},
-          '043':{code:'KA', name:'Dragonair'},
-          '044':{code:'AR', name:'Aerolineas Argentinas'},
-          '045':{code:'LA', name:'LATAM'},
-          '047':{code:'TP', name:'TAP Air Portugal'},
-          '050':{code:'OA', name:'Olympic Air'},
-          '053':{code:'EI', name:'Aer Lingus'},
-          '055':{code:'AZ', name:'Alitalia / ITA legado'},
-          '057':{code:'AF', name:'Air France'},
-          '061':{code:'HM', name:'Air Seychelles'},
-          '063':{code:'SB', name:'Air Caledonie International'},
-          '064':{code:'OK', name:'Czech Airlines'},
-          '065':{code:'SV', name:'Saudia'},
-          '066':{code:'8Q', name:'Onur Air'},
-          '068':{code:'TM', name:'LAM Linhas Aereas de Mocambique'},
-          '071':{code:'ET', name:'Ethiopian Airlines'},
-          '072':{code:'GF', name:'Gulf Air'},
-          '074':{code:'KL', name:'KLM'},
-          '075':{code:'IB', name:'Iberia'},
-          '076':{code:'ME', name:'MEA - Middle East Airlines'},
-          '077':{code:'MS', name:'Egyptair'},
-          '079':{code:'PR', name:'Philippine Airlines'},
-          '080':{code:'LO', name:'LOT Polish Airlines'},
-          '081':{code:'QF', name:'Qantas'},
-          '082':{code:'SN', name:'Brussels Airlines'},
-          '083':{code:'SA', name:'South African Airways'},
-          '086':{code:'NZ', name:'Air New Zealand'},
-          '098':{code:'AI', name:'Air India'},
-          '101':{code:'EN', name:'Air Dolomiti'},
-          '105':{code:'AY', name:'Finnair'},
-          '106':{code:'BW', name:'Caribbean Airlines'},
-          '107':{code:'W4', name:'LC Busre / LC Peru'},
-          '108':{code:'FI', name:'Icelandair'},
-          '110':{code:'UJ', name:'AlMasria Universal Airlines'},
-          '111':{code:'UP', name:'Bahamasair'},
-          '114':{code:'LY', name:'EL AL Israel Airlines'},
-          '115':{code:'JU', name:'Air Serbia'},
-          '117':{code:'SK', name:'SAS'},
-          '124':{code:'AH', name:'Air Algerie'},
-          '125':{code:'BA', name:'British Airways'},
-          '126':{code:'GA', name:'Garuda Indonesia'},
-          '127':{code:'G3', name:'GOL Linhas Aereas'},
-          '128':{code:'UO', name:'Hong Kong Express'},
-          '130':{code:'5F', name:'Flyone'},
-          '131':{code:'JL', name:'Japan Airlines'},
-          '133':{code:'LR', name:'Lineas Aereas Costarricenses'},
-          '134':{code:'AV', name:'Avianca'},
-          '135':{code:'VT', name:'Air Tahiti'},
-          '139':{code:'AM', name:'Aeromexico'},
-          '140':{code:'LI', name:'LIAT'},
-          '141':{code:'FZ', name:'Flydubai'},
-          '145':{code:'UC', name:'LAN Cargo'},
-          '147':{code:'AT', name:'Royal Air Maroc'},
-          '148':{code:'LN', name:'Libyan Airlines'},
-          '149':{code:'LG', name:'Luxair'},
-          '151':{code:'R5', name:'Jordan Aviation'},
-          '154':{code:'IO', name:'Iraero'},
-          '155':{code:'ES', name:'DHL Aviation EEMEA'},
-          '156':{code:'2I', name:'Star Peru'},
-          '157':{code:'QR', name:'Qatar Airways'},
-          '160':{code:'CX', name:'Cathay Pacific'},
-          '168':{code:'UM', name:'Air Zimbabwe'},
-          '169':{code:'HR', name:'Hahn Air'},
-          '171':{code:'FT', name:'FlyEgypt'},
-          '172':{code:'CV', name:'Cargolux'},
-          '173':{code:'HA', name:'Hawaiian Airlines'},
-          '176':{code:'EK', name:'Emirates'},
-          '179':{code:'AJ', name:'Aztec Airways'},
-          '180':{code:'KE', name:'Korean Air'},
-          '184':{code:'4B', name:'Boutique Air'},
-          '185':{code:'7N', name:'Pan Am World Airways Dominicana'},
-          '186':{code:'SW', name:'Air Namibia'},
-          '188':{code:'K6', name:'Cambodia Angkor Air'},
-          '191':{code:'IG', name:'MeridianaFly'},
-          '192':{code:'PY', name:'Surinam Airways'},
-          '193':{code:'IE', name:'Solomon Airlines'},
-          '199':{code:'TU', name:'Tunisair'},
-          '202':{code:'TA', name:'TACA International Airlines'},
-          '205':{code:'NH', name:'All Nippon Airways'},
-          '206':{code:'YE', name:'Yan Air'},
-          '209':{code:'AG', name:'Aruba Airlines'},
-          '214':{code:'PK', name:'Pakistan International Airlines'},
-          '217':{code:'TG', name:'Thai Airways'},
-          '218':{code:'NF', name:'Air Vanuatu'},
-          '220':{code:'LH', name:'Lufthansa'},
-          '228':{code:'UK', name:'TATA SIA Airline (Vistara)'},
-          '229':{code:'KU', name:'Kuwait Airways'},
-          '230':{code:'CM', name:'Copa Airlines'},
-          '232':{code:'MH', name:'Malaysian Airlines System'},
-          '235':{code:'TK', name:'Turkish Airlines'},
-          '238':{code:'IZ', name:'Arkia Israeli Airlines'},
-          '239':{code:'MK', name:'Air Mauritius'},
-          '241':{code:'EL', name:'Ellinair'},
-          '244':{code:'TN', name:'Air Tahiti Nui'},
-          '246':{code:'ST', name:'Germania'},
-          '247':{code:'O6', name:'Oceanair Linhas Aereas'},
-          '249':{code:'S3', name:'Santa Barbara Airlines'},
-          '250':{code:'HY', name:'Uzbekistan Airlines'},
-          '257':{code:'OS', name:'Austrian Airlines'},
-          '258':{code:'MD', name:'Air Madagascar'},
-          '260':{code:'FJ', name:'Fiji Airways'},
-          '262':{code:'U6', name:'Ural Airlines'},
-          '267':{code:'BE', name:'Flybe'},
-          '269':{code:'EQ', name:'TAME'},
-          '279':{code:'B6', name:'JetBlue'},
-          '281':{code:'RO', name:'Tarom'},
-          '285':{code:'RA', name:'Royal Nepal Airlines'},
-          '289':{code:'OM', name:'MIAT Mongolian Airlines'},
-          '294':{code:'T7', name:'Twin Jet'},
-          '297':{code:'CI', name:'China Airlines'},
-          '298':{code:'UT', name:'UTair Aviation'},
-          '307':{code:'WE', name:'Centurion Air Cargo'},
-          '308':{code:'V0', name:'Conviasa'},
-          '312':{code:'6E', name:'IndiGo'},
-          '316':{code:'5N', name:'JSC Nordavia'},
-          '319':{code:'8D', name:'Expo Aviation'},
-          '324':{code:'SC', name:'Shandong Airlines'},
-          '325':{code:'NP', name:'Nile Air'},
-          '328':{code:'DY', name:'Norwegian Air Shuttle'},
-          '331':{code:'S4', name:'SATA International Airlines'},
-          '333':{code:'VO', name:'VLM Airlines'},
-          '334':{code:'FN', name:'Fastjet Airlines'},
-          '347':{code:'WP', name:'Hawaii Island Air'},
-          '355':{code:'E7', name:'Estafeta Carga Aerea'},
-          '356':{code:'C8', name:'Cargolux Italia'},
-          '357':{code:'8G', name:'Fly Mid Africa'},
-          '362':{code:'7R', name:'Rusline'},
-          '365':{code:'W2', name:'Flexflight'},
-          '366':{code:'8H', name:'BH Air'},
-          '369':{code:'5Y', name:'Atlas Air'},
-          '376':{code:'BB', name:'Seaborne Airlines'},
-          '378':{code:'KX', name:'Cayman Airways'},
-          '381':{code:'SM', name:'Air Cairo'},
-          '390':{code:'A3', name:'Aegean Airlines'},
-          '403':{code:'PO', name:'Polar Air Cargo'},
-          '408':{code:'M4', name:'Mistral Air'},
-          '409':{code:'YM', name:'Montenegro Airlines'},
-          '413':{code:'SZ', name:'Air Company Somon Air'},
-          '417':{code:'E6', name:'Bringer Corporation'},
-          '421':{code:'S7', name:'Siberia Airlines'},
-          '425':{code:'DP', name:'Pobeda Airlines'},
-          '427':{code:'TX', name:'Air Caraibes'},
-          '429':{code:'VL', name:'Med View Airlines'},
-          '439':{code:'ZI', name:'Aigle Azur'},
-          '452':{code:'3O', name:'Air Arabia Maroc'},
-          '459':{code:'WB', name:'Rwandair Express'},
-          '460':{code:'EB', name:'Wamos Air'},
-          '464':{code:'Z8', name:'Amaszonas'},
-          '465':{code:'KC', name:'Air Astana'},
-          '467':{code:'T3', name:'Eastern Airways (UK)'},
-          '469':{code:'4M', name:'LAN Argentina'},
-          '474':{code:'NT', name:'Binter Canarias Airlines'},
-          '475':{code:'0B', name:'Blue Air'},
-          '477':{code:'NE', name:'Nesma Airlines'},
-          '478':{code:'XW', name:'NokScoot Airlines'},
-          '479':{code:'ZH', name:'Shenzhen Airlines'},
-          '480':{code:'BM', name:'British Midland Regional'},
-          '489':{code:'W8', name:'Cargojet Airways'},
-          '501':{code:'7L', name:'Silk Way West Airlines'},
-          '502':{code:'7J', name:'Tajik Air'},
-          '512':{code:'RJ', name:'Royal Jordanian Airlines'},
-          '514':{code:'G9', name:'Air Arabia'},
-          '515':{code:'SF', name:'Tassili Airlines'},
-          '526':{code:'WN', name:'Southwest Airlines'},
-          '535':{code:'3J', name:'Jubba Airways'},
-          '544':{code:'LP', name:'LAN Peru'},
-          '547':{code:'2K', name:'AeroGal'},
-          '551':{code:'YU', name:'EuroAtlantic Airways'},
-          '555':{code:'SU', name:'Aeroflot'},
-          '558':{code:'5O', name:'Europe Airpost'},
-          '560':{code:'P3', name:'CargoLogicAir'},
-          '564':{code:'XQ', name:'SunExpress'},
-          '566':{code:'PS', name:'Ukraine International Airlines'},
-          '572':{code:'9U', name:'Air Moldova'},
-          '575':{code:'7C', name:'Coyne Air Limited'},
-          '576':{code:'GG', name:'Sky Lease I'},
-          '577':{code:'AD', name:'Azul Linhas Aereas'},
-          '580':{code:'RU', name:'AirBridgeCargo'},
-          '589':{code:'9W', name:'Jet Airways'},
-          '593':{code:'XY', name:'National Air Service (NAS)'},
-          '598':{code:'HZ', name:'SAT Airlines'},
-          '599':{code:'8M', name:'Myanmar Airways International'},
-          '602':{code:'P9', name:'Peruvian Air Line'},
-          '605':{code:'H2', name:'SKY Airline'},
-          '606':{code:'A9', name:'Georgian Airways'},
-          '607':{code:'EY', name:'Etihad'},
-          '610':{code:'KK', name:'AtlasJet Airlines'},
-          '615':{code:'QY', name:'European Air Transport'},
-          '618':{code:'SQ', name:'Singapore Airlines'},
-          '623':{code:'FB', name:'Bulgaria Air'},
-          '624':{code:'PC', name:'Pegasus Airlines'},
-          '627':{code:'QV', name:'Lao Airlines'},
-          '628':{code:'B2', name:'Belavia'},
-          '629':{code:'MI', name:'SilkAir'},
-          '631':{code:'GL', name:'Air Greenland'},
-          '633':{code:'GQ', name:'Skyexpress'},
-          '636':{code:'BP', name:'Air Botswana'},
-          '637':{code:'B8', name:'Eritrean Airlines'},
-          '643':{code:'KM', name:'Air Malta'},
-          '649':{code:'TS', name:'Air Transat'},
-          '650':{code:'OY', name:'Andes Lineas Aereas'},
-          '652':{code:'RX', name:'Regent Airways'},
-          '653':{code:'JY', name:'Intercaribbean Airlines'},
-          '655':{code:'DV', name:'SCAT Airlines'},
-          '656':{code:'PX', name:'Air Niugini'},
-          '657':{code:'BT', name:'Air Baltic'},
-          '659':{code:'P0', name:'Proflight Commuter Services'},
-          '664':{code:'YC', name:'Yamal Airlines'},
-          '665':{code:'UB', name:'Myanmar National Airlines'},
-          '668':{code:'TR', name:'Scoot'},
-          '672':{code:'BI', name:'Royal Brunei'},
-          '675':{code:'NX', name:'Air Macau'},
-          '688':{code:'BD', name:'Cambodia Bayon Airlines'},
-          '689':{code:'WX', name:'CityJet'},
-          '695':{code:'BR', name:'EVA Air'},
-          '696':{code:'VR', name:'TACV Cabo Verde Airlines'},
-          '699':{code:'UW', name:'Uni-Top Airlines'},
-          '700':{code:'5C', name:'Cargo Airlines Limited'},
-          '701':{code:'WF', name:'Wideroe'},
-          '706':{code:'KQ', name:'Kenya Airways'},
-          '712':{code:'V7', name:'Volotea'},
-          '717':{code:'R7', name:'Aserca Airlines'},
-          '724':{code:'LX', name:'Swiss'},
-          '725':{code:'W3', name:'Arik Air International'},
-          '729':{code:'QT', name:'Tampa Cargo'},
-          '731':{code:'MF', name:'Xiamen Airlines'},
-          '738':{code:'VN', name:'Vietnam Airlines'},
-          '739':{code:'7V', name:'Federal Airlines'},
-          '742':{code:'9V', name:'Avior Airlines'},
-          '745':{code:'AB', name:'Air Berlin'},
-          '758':{code:'FK', name:'Kelowna Flightcraft Air Charter'},
-          '760':{code:'UU', name:'Air Austral'},
-          '767':{code:'RC', name:'Atlantic Airways'},
-          '771':{code:'J2', name:'Azerbaijan Airlines'},
-          '772':{code:'SX', name:'Skywork Airlines'},
-          '774':{code:'FM', name:'Shanghai Airlines'},
-          '781':{code:'MU', name:'China Eastern Airlines'},
-          '783':{code:'E9', name:'Evelop Airlines'},
-          '784':{code:'CZ', name:'China Southern Airlines'},
-          '795':{code:'VA', name:'Virgin Australia'},
-          '796':{code:'BJ', name:'Nouvelair'},
-          '803':{code:'AE', name:'Mandarin Airlines'},
-          '810':{code:'M6', name:'Amerijet International'},
-          '817':{code:'MJ', name:'Mihin Lanka'},
-          '818':{code:'6H', name:'Israir Airlines'},
-          '826':{code:'GS', name:'TianJin Airlines'},
-          '828':{code:'RH', name:'Hong Kong Air Cargo Carrier'},
-          '829':{code:'PG', name:'Bangkok Airways'},
-          '831':{code:'OU', name:'Croatia Airlines'},
-          '836':{code:'NS', name:'Hebei Airlines'},
-          '837':{code:'4O', name:'Interjet'},
-          '838':{code:'WS', name:'WestJet Airlines'},
-          '847':{code:'PN', name:'China West Air Company'},
-          '849':{code:'R3', name:'Air Company Yakutia'},
-          '851':{code:'HX', name:'Hong Kong Airlines'},
-          '859':{code:'8L', name:'Lucky Air'},
-          '861':{code:'MR', name:'Hunnu Air'},
-          '865':{code:'M7', name:'Aerotransportes Mas de Carga'},
-          '876':{code:'3U', name:'Sichuan Airlines'},
-          '880':{code:'HU', name:'Hainan Airlines'},
-          '881':{code:'DE', name:'Condor Flugdienst'},
-          '883':{code:'BU', name:'Compagnie Africaine d\'Aviation'},
-          '887':{code:'ZM', name:'Air Manas'},
-          '898':{code:'JD', name:'Beijing Capital Airlines'},
-          '910':{code:'WY', name:'Oman Air'},
-          '912':{code:'QW', name:'Qingdao Airlines'},
-          '923':{code:'SS', name:'Corsair'},
-          '930':{code:'OB', name:'Boliviana de Aviacion'},
-          '932':{code:'VS', name:'Virgin Atlantic Airways'},
-          '933':{code:'KZ', name:'Nippon Cargo Airlines'},
-          '942':{code:'VW', name:'Transportes Aeromar'},
-          '946':{code:'V4', name:'Vensecar Internacional'},
-          '957':{code:'LA', name:'LATAM'},
-          '961':{code:'LQ', name:'Lanmei Airlines'},
-          '969':{code:'ZA', name:'Sky Angkor Airlines'},
-          '978':{code:'VJ', name:'Vietjet Aviation'},
-          '980':{code:'CE', name:'Chalair Aviation'},
-          '984':{code:'VX', name:'Virgin America'},
-          '988':{code:'OZ', name:'Asiana Airlines'},
-          '992':{code:'D5', name:'DHL Aero Expreso'},
-          '996':{code:'UX', name:'Air Europa'},
-          '997':{code:'BG', name:'Biman Bangladesh Airlines'},
-          '999':{code:'CA', name:'Air China'}
-        };
-        return map[prefix] || null;
-      }
-      function getAirlineByTicketPrefix(ticket){
+            function getAirlineByTicketPrefix(ticket){
         const info = getAirlineInfoByTicketPrefix(ticket);
         return info ? info.name : '';
       }
 
-      function canonicalPaxNameForMatch(name){
-        let s = normalizePaxName(String(name||'')).toUpperCase();
-        s = s.replace(/^\s*\d+\.\s*/, '');
-        s = s.replace(/\b(ADT|CHD|INF|CNN|INS|ST)\b/gi, ' ');
-        s = s.replace(/\b(MR|MRS|MISS|MSTR|MST|MS)\b/gi, ' ');
-        s = s.replace(/\s+/g, ' ').trim();
-        const parts = s.split('/');
-        if(parts.length >= 2){
-          const sur = parts[0].trim();
-          const giv = parts.slice(1).join('/').replace(/\//g,' ').replace(/\s+/g,' ').trim();
-          return (sur + '/' + giv).trim();
-        }
-        return s;
-      }
-      function paxNameLooseKey(name){
-        return canonicalPaxNameForMatch(name).replace(/[^A-Z0-9]+/g,'');
-      }
-      function parseTickets(text){
-        const src = String(text||'');
-        const lines = normalizeGdsText(src).lines;
-        const out = {};
-        const infOut = {};
-        const meta = { loc:'', source:'', airlineInfos:[], tktMasks:[] };
-        let pendingTicket = null;
-        const orphanTickets = [];
-        const grabP = (line)=>{
-          const s = String(line||'');
-          const m = s.match(/\/P(\d+)(?:\D|$)/i);
-          return m ? parseInt(m[1],10) : null;
-        };
-        const grabTicket = (line)=>{
-          const s = String(line||'');
-          let m = s.match(/(?:^|[^\d])(\d{3})-(\d{10})(?:-(\d{2,3}))?(?=[^\d]|$)/);
-          if(m) return ensureTicketHyphen(`${m[1]}-${m[2]}`);
-          m = s.match(/(?:^|[^\d])(\d{13})(?:-(\d{2,3}))?(?=[^\d]|$)/);
-          if(m) return ensureTicketHyphen(m[1]);
-          return null;
-        };
-        const isFaFheLine = (line)=>/(?:^|\s)(?:FA|FHE)\s+(?:PAX|INF)(?:\s|$)/i.test(String(line||''));
-        const isTktMask = /(?:^|\n)\s*TKT-(\d{13})(?:-\d{2,3})?/i.test(src);
-
-        if(isTktMask){
-          meta.source = 'TKT';
-          const blocks = String(src).split(/(?=^\s*TKT-\d{13}(?:-\d{2,3})?)/m).filter(s=>/TKT-\d{13}/i.test(s));
-          for(const block of blocks){
-            const tkm = block.match(/(?:^|\n)\s*TKT-(\d{13})(?:-\d{2,3})?/i);
-            const baseTicket = tkm ? ensureTicketHyphen(tkm[1]) : '';
-            const locm = block.match(/\bLOC-([A-Z0-9]{5,6})\b/i);
-            if(!meta.loc && locm) meta.loc = (locm[1] || '').toUpperCase();
-            let paxName = '';
-            let paxType = '';
-            for(const line of normalizeGdsText(block).lines){
-              const pm = String(line||'').match(/^\s*\d+\.\s*([A-Z][A-Z\s'\/\-]+?)\s+(ADT|CHD|INF)\b/i);
-              if(pm){
-                paxName = normalizePaxName(pm[1]);
-                paxType = (pm[2]||'').toUpperCase();
-                break;
-              }
-            }
-            if(baseTicket){
-              meta.tktMasks.push({
-                ticket: baseTicket,
-                loc: locm ? (locm[1]||'').toUpperCase() : '',
-                name: paxName,
-                type: paxType,
-                canonicalName: canonicalPaxNameForMatch(paxName)
-              });
-            }
-          }
-        }
-
-        for(const line of lines){
-          const isFaFhe = isFaFheLine(line);
-          const isInfLine = /(?:^|\s)(?:FA|FHE)\s+INF(?:\s|$)/i.test(String(line||''));
-          const tk = grabTicket(line);
-          const p = grabP(line);
-          if(isFaFhe && tk && p){
-            if(isInfLine){ infOut[p] = tk; }
-            else { out[p] = tk; }
-            pendingTicket = null;
-            continue;
-          }
-          if(isFaFhe && tk){
-            pendingTicket = {ticket:tk, isInf:isInfLine};
-            if(!orphanTickets.includes(tk)) orphanTickets.push(tk);
-            continue;
-          }
-          if(pendingTicket && p){
-            if(pendingTicket.isInf) infOut[p] = pendingTicket.ticket;
-            else out[p] = pendingTicket.ticket;
-            pendingTicket = null;
-            continue;
-          }
-          if(tk && p && !out[p] && !infOut[p]){
-            if(isInfLine) infOut[p] = tk;
-            else out[p] = tk;
-            continue;
-          }
-        }
-        if(orphanTickets.length === 1 && Object.keys(out).length === 0 && meta.tktMasks.length === 0){
-          out[1] = orphanTickets[0];
-        }
-        const allTickets = [...Object.values(out), ...Object.values(infOut), ...meta.tktMasks.map(x=>x.ticket)].filter(Boolean);
-        const airlineInfos = [...new Map(allTickets.map(tk=>{
-          const info = getAirlineInfoByTicketPrefix(tk);
-          return info ? [info.code, info] : null;
-        }).filter(Boolean)).values()];
-        meta.airlineInfos = airlineInfos;
-        return { mapping: out, infMapping: infOut, meta };
-      }
-      function applyTickets(){
+                        function applyTickets(){
         const ta = $("inter_original");
         if(!ta) return;
         const parsed = parseTickets(ta.value || '');
@@ -5603,6 +5834,148 @@ document.getElementById("paxq_adt").value = "1";
         const run = ()=>{ if(isInterAuto()) applyTickets(); };
         tk.addEventListener('paste', ()=> setTimeout(run, 0));
         tk.addEventListener('input', ()=>{ clearTimeout(tk.__fxq_t); tk.__fxq_t = setTimeout(run, 250); });
+      }
+
+      // ----- Suite de simulacao do parser (portada da linhagem 1.0.24c) -----
+      // Roda contra as funcoes REAIS deste arquivo, sem copia. Rode no console
+      // com runFXQParserSimulations(), ou abra a pagina com #fxo-lab na URL que
+      // ela dispara sozinha e grava o resultado em window.__FXQ_LAST_SIMULATIONS.
+      // Ao mexer em parsePassengersData/parseBagFromText/parseFxoBlock, rodar isto.
+      function runParserSimulations(){
+        const sep = " • ";
+        const savedSegments = state.parseMeta.segments;
+        const results = [];
+        const sameQty = (actual, expected)=>["ADT","CHD","INF"].every(t=>(actual[t]||0)===(expected[t]||0));
+        const namesOf = (parsed)=>parsed.pax.map(p=>`${p.type}:${p.name}${p.linkedTo ? `->P${p.linkedTo}` : ""}`);
+
+        function addPaxCase(name, input, expectedQty, requiredNames){
+          const parsed = parsePassengersData(input);
+          const names = namesOf(parsed);
+          const missing = (requiredNames||[]).filter(n=>!names.includes(n));
+          const pass = sameQty(parsed.qty, expectedQty) && !missing.length;
+          results.push({type:"PAX", name, pass, expected:JSON.stringify(expectedQty), actual:JSON.stringify(parsed.qty), detail:missing.length ? `faltou ${missing.join(", ")}` : names.join(" | ")});
+        }
+
+        function addBagCase(name, fxoText, expectedBag){
+          state.parseMeta.segments = parseSegments(fxoText);
+          const parsed = parseFxoBlock(fxoText, "ADT");
+          results.push({type:"BAG", name, pass:parsed.bag === expectedBag, expected:expectedBag, actual:parsed.bag || "", detail:`segmentos ${state.parseMeta.segments.length}`});
+        }
+
+        const baseFxo = [
+          "FARE BALANCE        USD 10.00",
+          "PENALTY             USD 0.00",
+          "TOTAL ADD COLL      USD 10.00",
+          "AL FLGT BK DATE TIME FARE BASIS NVB NVA BG"
+        ].join("\n");
+
+        addPaxCase("PNR 1 ADT com datas de segmento", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z BMQ84Q",
+          "1.VICENTE MENDES CARNEIRO/JOSE MR(ADT/09NOV90)",
+          "2 KL9299 T 31MAY 7*CWBGRU HK1 1105 1215 31MAY E KL/BMQ84Q",
+          "3 KL2416 T 31MAY 7*GRUCDG HK1 1440 0705 01JUN E KL/BMQ84Q",
+          "4 KL2014 T 01JUN 1*CDGNTE HK1 0835 0940 01JUN E KL/BMQ84Q"
+        ].join("\n"), {ADT:1, CHD:0, INF:0}, ["ADT:VICENTE MENDES CARNEIRO/JOSE MR"]);
+
+        addPaxCase("PNR ADT + CHD explicito", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z ABC123",
+          "1.SILVA/JOAO MR(ADT/01JAN80)",
+          "2.SILVA/MARIA MISS(CHD/10OCT18)"
+        ].join("\n"), {ADT:1, CHD:1, INF:0}, ["CHD:SILVA/MARIA MISS"]);
+
+        addPaxCase("PNR ADT com INF inline", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z INF123",
+          "1.COSTA/CARLOS MR(ADT/01JAN80)(INF/COSTA/BEBE MSTR/20JAN25)"
+        ].join("\n"), {ADT:1, CHD:0, INF:1}, ["INF:COSTA/BEBE MSTR->P1"]);
+
+        // Regressao: o comando NM voltava ZERO passageiros antes do porte 1.0.24c.
+        addPaxCase("Comandos NM com ADT/CHD/INF", [
+          "NM2SILVA/JOAO MR/MARIA MRS",
+          "NM1SOUZA/ANA MISS(CHD/12MAR18)",
+          "NM1COSTA/CARLOS MR(INF/COSTA/BEBE MSTR/20JAN25)"
+        ].join("\n"), {ADT:3, CHD:1, INF:1}, ["CHD:SOUZA/ANA MISS", "INF:COSTA/BEBE MSTR->P4"]);
+
+        // Regressao: o SSR CHLD classificava a crianca como adulto (tarifa errada).
+        addPaxCase("SSR CHLD/INFT fallback", [
+          "RP/SAO2R2100/SAO2R2100 G3/RM 12APR26/0430Z SSR123",
+          "1.SANTOS/CAMILA MISS",
+          "2.SANTOS/JOAO MR",
+          "SSR CHLD YY HK1-10OCT18/P1",
+          "SSR INFT-SANTOS/BEBE MSTR/15MAR25/P2"
+        ].join("\n"), {ADT:1, CHD:1, INF:1}, ["CHD:SANTOS/CAMILA MISS", "INF:SANTOS/BEBE MSTR->P2"]);
+
+        addBagCase("Bagagem igual em todos os trechos", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 1PC",
+          "GRU CDG AF 0455 Y *31MAY 1440 ABC 1PC"
+        ].join("\n"), "1PC");
+
+        // Apresentacao por ROTA (nossa), nao por segmento: a agencia le a rota.
+        addBagCase("Bagagem mista por segmento", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 1PC",
+          "GRU CDG AF 0455 Y *31MAY 1440 ABC 2PC",
+          "CDG NTE AF 2014 Y *01JUN 0835 ABC NO BAG"
+        ].join("\n"), `1PC: CWB-GRU${sep}2PC: GRU-CDG${sep}Sem bagagem: CDG-NTE`);
+
+        addBagCase("Bagagem com peso por peca", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 1PC/23KG",
+          "GRU CDG AF 0455 Y *31MAY 1440 ABC 1X23KG"
+        ].join("\n"), `1PC/23kg: CWB-GRU${sep}1x23kg: GRU-CDG`);
+
+        addBagCase("Bagagem por peso sem peca", [
+          baseFxo,
+          "CWB GRU LA 3201 Y *31MAY 1105 ABC 23K"
+        ].join("\n"), "23kg");
+
+        // Regressao do bug corrigido em cb72fe0: formatos "1P" e "2PC"
+        // misturados na mesma mascara. O regex antigo lia so os "1P", nao
+        // achava os "2PC" e declarava franquia UNIFORME - mandava bagagem
+        // menor que a real para a agencia, e o e-mail parecia certo.
+        addBagCase("Formatos 1P e 2PC misturados (nao declarar uniforme)", [
+          baseFxo,
+          "GRU",
+          "GIG LA 3201 Y 31MAY 1105 ABC 1P",
+          "MIA LA 3202 Y 05JUN 1400 ABC 2PC"
+        ].join("\n"), `1PC: GRU-GIG${sep}2PC: GIG-MIA`);
+
+        // Regressao: franquia uniforme no formato com sufixo PC ficava vazia.
+        addBagCase("Sufixo PC uniforme (antes vinha vazio)", [
+          baseFxo,
+          "GRU",
+          "GIG LA 3201 Y 31MAY 1105 ABC 1PC",
+          "MIA LA 3202 Y 05JUN 1400 ABC 1PC"
+        ].join("\n"), "1PC");
+
+        // Regressao: NO BAG e franquia por peso ficavam vazias.
+        addBagCase("NO BAG uniforme (antes vinha vazio)", [
+          baseFxo,
+          "GRU",
+          "GIG LA 3201 Y 31MAY 1105 ABC NO BAG"
+        ].join("\n"), "Sem bagagem");
+
+        state.parseMeta.segments = savedSegments;
+        window.__FXQ_LAST_SIMULATIONS = results;
+        if(window.console && console.table) console.table(results);
+        if(String(location.hash||"").toLowerCase().includes("fxo-lab")){
+          let pre = document.getElementById("fxqParserSimulationResults");
+          if(!pre){
+            pre = document.createElement("pre");
+            pre.id = "fxqParserSimulationResults";
+            pre.hidden = true;
+            document.body.appendChild(pre);
+          }
+          pre.textContent = JSON.stringify(results, null, 2);
+          document.body.setAttribute("data-fxq-sim-pass", results.every(r=>r.pass) ? "1" : "0");
+        }
+        return results;
+      }
+
+      state.runSimulations = runParserSimulations;
+      window.runFXQParserSimulations = runParserSimulations;
+      if(String(location.hash||"").toLowerCase().includes("fxo-lab")){
+        setTimeout(runParserSimulations, 0);
       }
 
       applyInterTipoUI();
