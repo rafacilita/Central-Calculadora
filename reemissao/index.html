@@ -751,6 +751,23 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
       <div class="bd">
         <div class="note" id="tipBox"></div>
+        <details class="note" id="copilotBox" style="margin-top:10px">
+          <summary><b>Ler print com o Copilot</b> <span class="muted small">(E-Latam / E-Gol • opcional)</span></summary>
+          <div class="muted small" style="margin-top:6px">
+            <b>Copiar prompt</b> &rarr; <b>Abrir Copilot</b>, cole o prompt e anexe o print &rarr; cole a resposta (JSON) aqui embaixo.
+            O print vai só para o Copilot corporativo; a calculadora não envia nada para fora.
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="action" id="btnCopilotPrompt" type="button">Copiar prompt</button>
+            <button class="action" id="btnCopilotAbrir" type="button">Abrir Copilot ↗</button>
+            <div>
+              <label>Aplicar na linha de</label>
+              <select id="copilot_pax"><option value="ADT">ADT</option><option value="CHD">CHD</option><option value="INF">INF</option></select>
+            </div>
+          </div>
+          <textarea id="copilot_json" rows="5" placeholder="Cole aqui a resposta (JSON) do Copilot" style="margin-top:8px"></textarea>
+          <div id="copilot_result"></div>
+        </details>
         <div id="rentSection" class="rentSection">
           <label class="rentToggle"><input id="rentab" type="checkbox" /> <span>Rentabilização</span></label>
           <div class="rentHint">Uso interno — não vai para agência. Entra apenas na OBS (RF) para o CCO. (adiciona @# no final do CRR no e-mail)</div>
@@ -1243,7 +1260,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
           <div class="hr" id="hrValuesSep"></div>
 
           <div id="interValuesWrap">
-          <div class="muted small"><b>Valores por tipo de pax (na moeda selecionada • RC sempre em USD)</b></div>
+          <div class="muted small"><b>Valores por tipo de pax (na moeda selecionada • RC sempre em USD • Multa BRL já em reais, sem conversão)</b></div>
           <div class="hr"></div>
 
 
@@ -1254,6 +1271,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
             <div><label>Dif. taxa (ADT)</label><input id="inter_tax_ADT" placeholder="0,00" /></div>
             <div><label>DU/Rav (ADT)</label><input id="inter_du_ADT" placeholder="0,00" /></div>
             <div><label>Multa (ADT)</label><input id="inter_pen_ADT" placeholder="0,00" /></div>
+            <div><label>Multa BRL (ADT)</label><input id="inter_penbrl_ADT" placeholder="0,00" title="Multa que o sistema já mostra em reais (ex.: E-Latam/E-Gol). Soma direto no total em BRL, sem câmbio." /></div>
             <div><label>RC USD (ADT)</label><input id="inter_fee_ADT" placeholder="0,00" /></div>
           </div>
 
@@ -1263,6 +1281,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
             <div><label>Dif. taxa (CHD)</label><input id="inter_tax_CHD" placeholder="0,00" /></div>
             <div><label>DU/Rav (CHD)</label><input id="inter_du_CHD" placeholder="0,00" /></div>
             <div><label>Multa (CHD)</label><input id="inter_pen_CHD" placeholder="0,00" /></div>
+            <div><label>Multa BRL (CHD)</label><input id="inter_penbrl_CHD" placeholder="0,00" title="Multa que o sistema já mostra em reais (ex.: E-Latam/E-Gol). Soma direto no total em BRL, sem câmbio." /></div>
             <div><label>RC USD (CHD)</label><input id="inter_fee_CHD" placeholder="0,00" /></div>
           </div>
 
@@ -1272,6 +1291,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
             <div><label>Dif. taxa (INF)</label><input id="inter_tax_INF" placeholder="0,00" /></div>
             <div><label>DU/Rav (INF)</label><input id="inter_du_INF" placeholder="0,00" /></div>
             <div><label>Multa (INF)</label><input id="inter_pen_INF" placeholder="0,00" /></div>
+            <div><label>Multa BRL (INF)</label><input id="inter_penbrl_INF" placeholder="0,00" title="Multa que o sistema já mostra em reais (ex.: E-Latam/E-Gol). Soma direto no total em BRL, sem câmbio." /></div>
             <div><label>RC USD (INF)</label><input id="inter_fee_INF" placeholder="0,00" /></div>
           </div>
 
@@ -2512,6 +2532,159 @@ function parseTickets(text){
         meta.airlineInfos = airlineInfos;
         return { mapping: out, infMapping: infOut, meta };
       }
+// GERADO por ferramentas/gera_prompt_copilot.cjs a partir de ia-agente/prompt_leitor_reemissao.md.
+// Nao edite aqui: edite o .md e gere de novo.
+const COPILOT_PROMPT = "Você vai ler o print de tela anexado, de um sistema de reemissão de bilhete aéreo, e devolver SOMENTE um JSON, sem texto antes ou depois.\n\nREGRAS GERAIS\n- Copie só o que está visível na imagem. Não calcule, não estime, não corrija e não complete nada.\n- Se um campo não estiver visível ou legível, use null. Nunca invente nem \"chute\" um valor.\n- Números: ponto como separador decimal, sem separador de milhar e sem símbolo de moeda. Exemplo: 1.234,56 na tela vira 1234.56.\n- Moedas: código de 3 letras (BRL, USD, EUR).\n- Não transcreva nome de passageiro, número de bilhete nem localizador.\n- Se a imagem estiver borrada, cortada ou não for uma tela de cálculo de reemissão, devolva \"sistema\": \"desconhecido\" e todos os outros campos null, e explique em \"observacoes\".\n\nIDENTIFIQUE O SISTEMA e leia conforme o caso:\n\n1) E-Latam / E-Gol (colunas \"Trocar\", \"Nova Quantia\", \"Moeda de Reemissão\")\n- tarifa_antiga = linha BASE, coluna \"Trocar\"\n- tarifa_nova = linha BASE, coluna \"Nova Quantia\"\n- dif_tarifa = linha BASE, coluna \"Moeda de Reemissão\"\n- dif_taxas = linha \"Taxas\", coluna \"Moeda de Reemissão\"\n- multa = campo \"Taxa por Mudança\" (isto é a multa, apesar do rótulo). Se estiver escrito \"N/A\", use 0.\n- total_a_cobrar = o \"Total\" FINAL, isolado, que aparece ABAIXO dos campos de multa/imposto/taxa de serviço. NÃO use a linha \"Total:\" intermediária (subtotal de BASE + Taxas). Se esse total final não estiver visível, use null.\n- Se houver linhas BASE USD e EQV, o cálculo é INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"USD\".\n  - eqv_antiga = linha EQV, coluna \"Trocar\"\n  - eqv_nova = linha EQV, coluna \"Nova Quantia\"\n  - dif_tarifa_brl = linha EQV, coluna \"Moeda de Reemissão\" (diferença em BRL)\n  - A multa já vem em BRL: multa_moeda = \"BRL\" e NÃO converta.\n- Se não houver BASE USD, tipo = \"NAC\", moeda_emissao = \"BRL\" e tudo está em BRL (multa_moeda = \"BRL\").\n- total_moeda só pode ter valor se total_a_cobrar tiver número; caso contrário, null.\n\n2) NDC Farelogix (\"Bilhete Antigo\", \"Bilhete Novo\", \"Cálculo da troca\")\n- NDC é sempre INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"USD\".\n- tarifa_antiga = \"Passagem original na tarifa-base\"\n- tarifa_nova = \"Tarifa-base nova\"\n- dif_tarifa = \"Diferença da tarifa-base\" (em USD)\n- cambio = \"Taxa de conversão de moeda\" (está explícito na tela)\n- dif_tarifa_brl = \"Diferença na moeda de venda\"\n- dif_taxas = \"Impostos de coleta de acréscimo\"\n- multa = campo \"Multa\"\n- penalidades_fiscais = \"Penalidades fiscais a pagar\"\n- total_a_cobrar = linha final (\"Total Forfeit\" ou \"Coleta de acréscimo\")\n- \"Impostos residuais\" são só informativos: coloque em observacoes, não em outro campo.\n\n3) NDC Amadeus (tudo em BRL)\n- NDC é sempre INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"BRL\", multa_moeda = \"BRL\".\n- dif_tarifa = \"Diferença de preço\" (leia o valor direto da tela, NÃO recalcule)\n- multa = \"Multas\"\n- tarifa_antiga e tarifa_nova = coluna Tarifa da tabela, antigo → novo\n\nFORMATO DA RESPOSTA (use exatamente estas chaves)\n```json\n{\n  \"sistema\": \"e-latam | e-gol | ndc-farelogix | ndc-amadeus | desconhecido\",\n  \"tipo\": \"NAC | INTER | null\",\n  \"moeda_emissao\": \"BRL | USD | EUR | null\",\n  \"tarifa_antiga\": null,\n  \"tarifa_nova\": null,\n  \"dif_tarifa\": null,\n  \"eqv_antiga\": null,\n  \"eqv_nova\": null,\n  \"dif_tarifa_brl\": null,\n  \"dif_taxas\": null,\n  \"multa\": null,\n  \"multa_moeda\": null,\n  \"penalidades_fiscais\": null,\n  \"cambio\": null,\n  \"total_a_cobrar\": null,\n  \"total_moeda\": null,\n  \"campos_nao_lidos\": [\"nomes dos campos que ficaram null por não estarem visíveis\"],\n  \"observacoes\": \"dúvidas, leituras incertas ou algo que não bateu; vazio se nada\"\n}\n```\nEm caso de dúvida sobre qualquer valor, deixe null e cite o campo em \"campos_nao_lidos\".";
+// ----- core: leitura devolvida pelo Copilot (JSON) -> campos da calculadora (puro, sem DOM) -----
+// O atendente anexa o print no Copilot corporativo, copia o JSON que ele devolve e cola na
+// calculadora. Nada daqui faz chamada de rede. Regra de ouro (confiabilidade): na duvida, o campo
+// fica EM BRANCO e entra na lista de conferencia; nada e assumido, calculado ou convertido.
+//
+// lerLeituraCopilot(texto, tipoPax) devolve:
+//   { ok:false, erro }                                           -> nao deu para usar
+//   { ok:true, sistema, tipo, moeda, tipoPax, campos:[{id,rotulo,valor,select?}],  // valor ja no formato da tela (1234,56)
+//     emBranco:[{rotulo,motivo}], infos:[texto], totalLido, totalMoeda, cambioImplicito }
+const COPILOT_SISTEMAS = ["e-latam", "e-gol", "ndc-farelogix", "ndc-amadeus"];
+const COPILOT_MOEDAS_INTER = ["USD", "EUR", "GBP", "CNY"]; // opcoes do seletor inter_cur
+
+// numero estrito: so number finito ou string "1234.56" (ponto decimal). Virgula/milhar = invalido.
+function copilotNumero(v){
+  if(typeof v === "number") return Number.isFinite(v) ? v : null;
+  if(typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v.trim());
+  return null;
+}
+
+function copilotFmt(n){ return n.toFixed(2).replace(".", ","); }
+
+// aceita o JSON puro, dentro de ```json ... ``` ou com texto antes/depois
+function copilotExtraiJson(texto){
+  const t = String(texto || "").trim();
+  if(!t) return { erro: "Cole aqui a resposta (JSON) do Copilot." };
+  const ini = t.indexOf("{"), fim = t.lastIndexOf("}");
+  if(ini < 0) return { erro: "Não achei um JSON na resposta do Copilot." };
+  if(fim <= ini) return { erro: "O JSON está incompleto ou inválido (faltou copiar um pedaço?)." };
+  try{
+    const o = JSON.parse(t.slice(ini, fim + 1));
+    if(!o || typeof o !== "object" || Array.isArray(o)) return { erro: "O JSON não tem o formato esperado." };
+    return { obj: o };
+  }catch(e){
+    return { erro: "O JSON está incompleto ou inválido (faltou copiar um pedaço?)." };
+  }
+}
+
+function lerLeituraCopilot(texto, tipoPax){
+  const ext = copilotExtraiJson(texto);
+  if(ext.erro) return { ok:false, erro: ext.erro };
+  const o = ext.obj;
+
+  const sistema = String(o.sistema || "").trim().toLowerCase();
+  if(!sistema) return { ok:false, erro: "O JSON não informa o sistema." };
+  if(sistema === "desconhecido") return { ok:false, erro: "O Copilot não reconheceu o sistema do print" + (o.observacoes ? ": " + o.observacoes : ".") };
+  if(!COPILOT_SISTEMAS.includes(sistema)) return { ok:false, erro: `Sistema "${sistema}" ainda não é preenchido automaticamente (por enquanto só E-Latam/E-Gol e NDC Farelogix/Amadeus).` };
+
+  const tipoLido = String(o.tipo || "").trim().toUpperCase();
+  const ehNdc = sistema.indexOf("ndc-") === 0;
+  // NDC e sempre Internacional, mesmo que o Copilot tenha lido como Nacional
+  const tipo = ehNdc ? "INTER" : tipoLido;
+  if(tipo !== "NAC" && tipo !== "INTER") return { ok:false, erro: "O JSON não informa se o cálculo é Nacional ou Internacional." };
+
+  const T = ["ADT","CHD","INF"].includes(tipoPax) ? tipoPax : "ADT";
+  const campos = [], emBranco = [], infos = [];
+  if(ehNdc && tipoLido !== "INTER") infos.push(`NDC é sempre Internacional: tratado como Internacional (o Copilot leu como ${tipoLido || "vazio"}).`);
+  let totalEsperado = null; // so Amadeus: "Diferença de preço" + "Multas" do proprio sistema (para conferir, nunca preenche)
+
+  // le um campo numerico; se veio algo que nao e numero, vai para a lista de conferencia
+  const num = (chave, rotulo)=>{
+    const bruto = o[chave];
+    if(bruto === null || bruto === undefined){
+      emBranco.push({ rotulo, motivo: "o Copilot não leu este valor no print" });
+      return null;
+    }
+    const n = copilotNumero(bruto);
+    if(n === null){ emBranco.push({ rotulo, motivo: `valor "${bruto}" não é um número válido` }); return null; }
+    return n;
+  };
+  const poe = (id, rotulo, n)=>{ if(n !== null) campos.push({ id, rotulo, valor: copilotFmt(n) }); };
+
+  const ehFarelogix = sistema === "ndc-farelogix";
+  const ehAmadeus = sistema === "ndc-amadeus";
+  const multaMoeda = String(o.multa_moeda || "").trim().toUpperCase();
+  let moeda = String(o.moeda_emissao || "").trim().toUpperCase();
+
+  if(tipo === "INTER"){
+    if(!/^[A-Z]{3}$/.test(moeda)){
+      return { ok:false, erro: "O Copilot não leu a moeda de emissão; sem ela os valores não podem ser preenchidos." };
+    }
+    if(COPILOT_MOEDAS_INTER.includes(moeda)){
+      campos.push({ id: "inter_cur", rotulo: "Moeda", valor: moeda, select: true });
+    }else{
+      // moeda fora do seletor (ex.: BRL no NDC Amadeus): vai em "Outra (código)". O codigo entra ANTES do seletor.
+      campos.push({ id: "inter_cur_other", rotulo: "Moeda (código)", valor: moeda });
+      campos.push({ id: "inter_cur", rotulo: "Moeda", valor: "OTHER", exibe: "Outra (código)", select: true });
+    }
+    poe(`inter_fare_${T}`, `Dif. tarifa (${T})`, num("dif_tarifa", `Dif. tarifa (${T})`));
+    const taxas = ehAmadeus ? null : num("dif_taxas", `Dif. taxa (${T})`);
+    if(taxas !== null){
+      // Farelogix mostra as taxas em BRL, e o campo da calculadora é na moeda de emissão: sem converter por conta propria
+      if(ehFarelogix && taxas !== 0) emBranco.push({ rotulo: `Dif. taxa (${T})`, motivo: `veio em BRL (${copilotFmt(taxas)}) e o campo é na moeda ${moeda}; lance manualmente` });
+      else poe(`inter_tax_${T}`, `Dif. taxa (${T})`, taxas);
+    }
+
+    const multa = num("multa", `Multa (${T})`);
+    if(multa !== null){
+      if(multa === 0) infos.push("Multa: 0 (sem multa neste cálculo).");
+      else if(multaMoeda === moeda) poe(`inter_pen_${T}`, `Multa (${T})`, multa);
+      else if(multaMoeda === "BRL") poe(`inter_penbrl_${T}`, `Multa BRL (${T})`, multa);
+      else emBranco.push({ rotulo: `Multa (${T})`, motivo: `a moeda da multa não foi informada com clareza (${multaMoeda || "vazia"}); valor lido: ${copilotFmt(multa)}` });
+    }
+    if(ehAmadeus){
+      // "Diferença de preço" do NDC Amadeus = valor a cobrar de diferença (tarifa + impostos juntos, formula interna do
+      // sistema). Entra como esta no campo Dif. tarifa; o total esperado = Diferença de preço + Multas, so para conferir.
+      const difPreco = copilotNumero(o.dif_tarifa), multaAm = copilotNumero(o.multa);
+      if(difPreco !== null && multaAm !== null) totalEsperado = difPreco + multaAm;
+      infos.push("Amadeus: a \"Diferença de preço\" do sistema foi lançada em Dif. tarifa (ela já considera os impostos; o Amadeus não traz a taxa separada).");
+    }
+    if(moeda === "BRL"){
+      campos.push({ id: "inter_fx", rotulo: "Câmbio (BRL → BRL)", valor: "1,0000" });
+    }else if(ehFarelogix){
+      // o Farelogix mostra a "Taxa de conversao de moeda" na tela (nao e inferida)
+      const cambio = copilotNumero(o.cambio);
+      const penFiscal = copilotNumero(o.penalidades_fiscais);
+      if(penFiscal > 0) emBranco.push({ rotulo: "Penalidades fiscais", motivo: `R$ ${copilotFmt(penFiscal)} no print; a calculadora não tem campo próprio (some à multa, se for o caso)` });
+      if(cambio > 0 && moeda === "USD") campos.push({ id: "inter_fx", rotulo: "Câmbio (1 USD = R$)", valor: cambio.toFixed(4).replace(".", ",") });
+      else infos.push("Câmbio: não foi lido do print. A calculadora usa o câmbio do dia (BCB) ou o que você digitar.");
+    }else{
+      infos.push("Câmbio: não vem do print. A calculadora usa o câmbio do dia (BCB) ou o que você digitar.");
+    }
+  }else{
+    moeda = "BRL";
+    if(String(o.moeda_emissao || "").trim().toUpperCase() !== "BRL"){
+      return { ok:false, erro: "Cálculo Nacional deveria estar em BRL; o Copilot informou outra moeda. Confira o print." };
+    }
+    poe(`nac_old_${T}`, `Tarifa antiga (${T})`, num("tarifa_antiga", `Tarifa antiga (${T})`));
+    poe(`nac_new_${T}`, `Tarifa nova (${T})`, num("tarifa_nova", `Tarifa nova (${T})`));
+    poe(`nac_tax_${T}`, `Dif. taxa (${T})`, num("dif_taxas", `Dif. taxa (${T})`));
+    const multa = num("multa", `Multa (${T})`);
+    if(multa !== null){
+      if(multa === 0) infos.push("Multa: 0 (sem multa neste cálculo).");
+      else if(multaMoeda && multaMoeda !== "BRL") emBranco.push({ rotulo: `Multa (${T})`, motivo: `a multa veio em ${multaMoeda}, mas o Nacional é em BRL` });
+      else poe(`nac_pen_${T}`, `Multa (${T})`, multa);
+    }
+  }
+
+  // so para conferir depois (nunca preenche nada): total final lido e cambio implicito do print
+  const totalLido = copilotNumero(o.total_a_cobrar);
+  const totalMoeda = String(o.total_moeda || "").trim().toUpperCase() || null;
+  if(totalLido === null && totalEsperado === null) infos.push("Total final: não apareceu no print, então o total da calculadora não pode ser conferido com o do sistema.");
+  let cambioImplicito = null;
+  const difBase = copilotNumero(o.dif_tarifa), difBrl = copilotNumero(o.dif_tarifa_brl);
+  if(tipo === "INTER" && difBase > 0 && difBrl > 0) cambioImplicito = difBrl / difBase;
+
+  const obs = String(o.observacoes || "").trim();
+  if(obs) infos.push("Observação do Copilot: " + obs);
+
+  return { ok:true, sistema, tipo, moeda, tipoPax: T, campos, emBranco, infos, totalLido, totalMoeda, cambioImplicito, totalEsperado };
+}
     // ----- core: calculo de reemissao NAC/INTER (puro, sem DOM) -----
     // Recebem os dados ja lidos do formulario (ver readNacInputs/readInterInputs,
     // na UI) e devolvem o mesmo formato que calcNac()/calcInter() sempre devolveram.
@@ -2537,6 +2710,9 @@ function parseTickets(text){
       const rows = [];
       const { cur, fx, fxUSD } = data;
       let hasFeeUSD = false;
+      // Multa que o sistema ja mostra em BRL (E-Latam/E-Gol, NDC...): soma direto no total em BRL,
+      // sem passar pelo cambio. Fica FORA de perPax/totalCur de proposito (esses sao na moeda).
+      let penBRLTotal = 0;
 
       for(const p of data.perType){
         paxCount += p.qty;
@@ -2550,12 +2726,15 @@ function parseTickets(text){
 
         const perPax = p.fare + p.tax + p.du + p.pen + feeCur;
         totalCur += perPax * p.qty;
-        rows.push({t:p.t, qty:p.qty, fare:p.fare, tax:p.tax, du:p.du, pen:p.pen, feeUSD:p.feeUSD, feeCur, perPax, totalTipo: perPax*p.qty});
+        const penBRL = p.penBRL || 0;
+        penBRLTotal += penBRL * p.qty;
+        rows.push({t:p.t, qty:p.qty, fare:p.fare, tax:p.tax, du:p.du, pen:p.pen, penBRL, feeUSD:p.feeUSD, feeCur, perPax, totalTipo: perPax*p.qty});
       }
 
-      const totalBRL = fx > 0 ? totalCur * fx : 0;
+      // Sem cambio nao da pra converter o resto; so a multa em BRL nao pode virar "total" parcial.
+      const totalBRL = (fx > 0 || totalCur === 0) ? (fx > 0 ? totalCur * fx : 0) + penBRLTotal : 0;
       const rcNeedsUsdFx = (cur !== "USD" && hasFeeUSD && !(fxUSD > 0));
-      return {totalCur, fx, fxUSD, totalBRL, paxCount, cur, rows, rcNeedsUsdFx};
+      return {totalCur, fx, fxUSD, totalBRL, penBRLTotal, paxCount, cur, rows, rcNeedsUsdFx};
     }
 
     // ----- LZ-String (compactação offline para CRR3) -----
@@ -3297,7 +3476,8 @@ function updateRentComputed(mode, calc){
     function fmtCur(n){
       const cur = getInterCurrency();
       try{
-        return new Intl.NumberFormat("en-US", {style:"currency", currency: cur}).format(n || 0);
+        // BRL (ex.: NDC Amadeus, que e Internacional mas vem em reais) no formato brasileiro; as demais seguem em en-US
+        return new Intl.NumberFormat(cur === "BRL" ? "pt-BR" : "en-US", {style:"currency", currency: cur}).format(n || 0);
       }catch(e){
         return `${cur} ${(n||0).toFixed(2)}`;
       }
@@ -3684,6 +3864,9 @@ const store = getPaxStore();
         const c = calcInter();
         if(Math.abs(c.totalBRL) < 0.005) warnings.push("total INTER em R$ 0,00");
         if(c.fx > 0 && (c.fx < 0.5 || c.fx > 15)) warnings.push(`câmbio ${fmtNumPT(c.fx)} parece fora do normal`);
+        for(const r of c.rows){
+          if(r.pen > 0 && r.penBRL > 0) warnings.push(`multa informada na moeda e em BRL para ${r.t} (as duas somam — confira)`);
+        }
       }
       return warnings;
     }
@@ -3768,7 +3951,7 @@ const store = getPaxStore();
     // Remover, reordenar ou inserir no meio quebra a leitura de todo CRR4/CRR5
     // já existente (o índice passa a apontar para outro campo).
     // Só é seguro ADICIONAR itens novos no FINAL do array.
-    const CRR4_KEYS = ["themeSel","rentab","op_rf","agencia","filial","rent_tipo_multa","rent_tipo_diftar","rent_tipo_diftax","rent_pago_cia_multa_adt","rent_pago_cia_multa_chd","rent_pago_cia_multa_inf","rent_cobrar_ag_multa","rent_lucro_multa","rent_pago_cia_diftar_adt","rent_pago_cia_diftar_chd","rent_pago_cia_diftar_inf","rent_cobrar_ag_diftar","rent_lucro_diftar","rent_pago_cia_diftax_adt","rent_pago_cia_diftax_chd","rent_pago_cia_diftax_inf","rent_cobrar_ag_diftax","rent_lucro_diftax","cia","prazo","loc","oac","novo_loc","paxq_adt","paxq_chd","paxq_inf","pax_json","familia","pax","tks","bag","parcelamento","nac_fp","nac_link","nac_qty_ADT","nac_old_ADT","nac_new_ADT","nac_tax_ADT","nac_du_ADT","nac_pen_ADT","nac_qty_CHD","nac_old_CHD","nac_new_CHD","nac_tax_CHD","nac_du_CHD","nac_pen_CHD","nac_qty_INF","nac_old_INF","nac_new_INF","nac_tax_INF","nac_du_INF","nac_pen_INF","nac_services_on","nac_services_brl","nac_folio_on","nac_folio_text","nac_folio_agencia","nac_voos","nac_regras","inter_cur","inter_cur_other","inter_fx","inter_fx_usd","inter_incentivo","inter_tipo","inter_fp","inter_link","inter_qty_ADT","inter_fare_ADT","inter_tax_ADT","inter_du_ADT","inter_pen_ADT","inter_fee_ADT","inter_qty_CHD","inter_fare_CHD","inter_tax_CHD","inter_du_CHD","inter_pen_CHD","inter_fee_CHD","inter_qty_INF","inter_fare_INF","inter_tax_INF","inter_du_INF","inter_pen_INF","inter_fee_INF","inter_endosso_on","inter_endosso_text","inter_endosso_agencia","inter_original","inter_voos","inter_interno","rf_include_racode","rf_mask_numbers","rf_include_tks"];
+    const CRR4_KEYS = ["themeSel","rentab","op_rf","agencia","filial","rent_tipo_multa","rent_tipo_diftar","rent_tipo_diftax","rent_pago_cia_multa_adt","rent_pago_cia_multa_chd","rent_pago_cia_multa_inf","rent_cobrar_ag_multa","rent_lucro_multa","rent_pago_cia_diftar_adt","rent_pago_cia_diftar_chd","rent_pago_cia_diftar_inf","rent_cobrar_ag_diftar","rent_lucro_diftar","rent_pago_cia_diftax_adt","rent_pago_cia_diftax_chd","rent_pago_cia_diftax_inf","rent_cobrar_ag_diftax","rent_lucro_diftax","cia","prazo","loc","oac","novo_loc","paxq_adt","paxq_chd","paxq_inf","pax_json","familia","pax","tks","bag","parcelamento","nac_fp","nac_link","nac_qty_ADT","nac_old_ADT","nac_new_ADT","nac_tax_ADT","nac_du_ADT","nac_pen_ADT","nac_qty_CHD","nac_old_CHD","nac_new_CHD","nac_tax_CHD","nac_du_CHD","nac_pen_CHD","nac_qty_INF","nac_old_INF","nac_new_INF","nac_tax_INF","nac_du_INF","nac_pen_INF","nac_services_on","nac_services_brl","nac_folio_on","nac_folio_text","nac_folio_agencia","nac_voos","nac_regras","inter_cur","inter_cur_other","inter_fx","inter_fx_usd","inter_incentivo","inter_tipo","inter_fp","inter_link","inter_qty_ADT","inter_fare_ADT","inter_tax_ADT","inter_du_ADT","inter_pen_ADT","inter_fee_ADT","inter_qty_CHD","inter_fare_CHD","inter_tax_CHD","inter_du_CHD","inter_pen_CHD","inter_fee_CHD","inter_qty_INF","inter_fare_INF","inter_tax_INF","inter_du_INF","inter_pen_INF","inter_fee_INF","inter_endosso_on","inter_endosso_text","inter_endosso_agencia","inter_original","inter_voos","inter_interno","rf_include_racode","rf_mask_numbers","rf_include_tks","inter_penbrl_ADT","inter_penbrl_CHD","inter_penbrl_INF"];
     const CRR4_ID2K = {};
     const CRR4_K2ID = {};
     for(let i=0;i<CRR4_KEYS.length;i++){ 
@@ -4169,8 +4352,19 @@ function buildEmailHtmlInter(){
         ${link ? `<p style="margin:6px 0 0">${t.payLink} <b><a href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(link)}</a></b></p>` : ""}
       `.trim();
 
-      const fxLine = calc.fx > 0
-        ? `<p style="margin:6px 0 0"><b>${t.fxInformado}</b> 1 ${escapeHtml(calc.cur)} = ${calc.fx.toFixed(4).replace(".", isEN ? "." : ",")} BRL • <b>${t.totalBrl}</b> ${fmtBRL(calc.totalBRL, isEN)}</p>`
+      // Multa que veio em BRL: linha propria na tabela (sem conversao) e o total em BRL a inclui.
+      const penBrlDetail = calc.rows.filter(r => r.penBRL > 0).map(r => `${r.t} ${r.qty} × ${fmtBRL(r.penBRL, isEN)}`).join("; ");
+      const penBrlRow = calc.penBRLTotal > 0
+        ? `
+            <tr>
+              <td colspan="7" style="text-align:right; background-color:#d9cce3"><b>${t.penBrl}</b> <span style="font-weight:400; color:#475569">(${escapeHtml(penBrlDetail)})</span></td>
+              <td style="text-align:right; background-color:#d9cce3"><b>${fmtBRL(calc.penBRLTotal, isEN)}</b></td>
+            </tr>`
+        : "";
+      const incMulta = calc.penBRLTotal > 0 ? ` ${t.incMultaBrl}` : "";
+
+      const fxLine = (calc.fx > 0 || (calc.totalCur === 0 && calc.penBRLTotal > 0))
+        ? `<p style="margin:6px 0 0">${calc.fx > 0 ? `<b>${t.fxInformado}</b> 1 ${escapeHtml(calc.cur)} = ${calc.fx.toFixed(4).replace(".", isEN ? "." : ",")} BRL • ` : ""}<b>${t.totalBrl}</b> ${fmtBRL(calc.totalBRL, isEN)}${incMulta}</p>`
         : `<p style="margin:6px 0 0; color:#6b4b00"><b>${isEN ? "Attention:" : "Atenção:"}</b> ${t.fxMissing.replace(/^Atenção: |^Attention: /, "")}</p>`;
 
       const incentivoLabel = incentivo === "Sim" ? t.yes : (incentivo === "Não" ? t.no : incentivo);
@@ -4214,7 +4408,7 @@ function buildEmailHtmlInter(){
             <tr>
               <td colspan="7" style="text-align:right; background-color:#d9cce3"><b>${t.totalCur(escapeHtml(calc.cur))}</b></td>
               <td style="text-align:right; background-color:#d9cce3"><b>${fmtCur(calc.totalCur)}</b></td>
-            </tr>
+            </tr>${penBrlRow}
           </table>
 
           ${fxLine}
@@ -4437,6 +4631,7 @@ function buildRfObsInter(){
           <tr><td style="padding:6px;">Diferença de taxa (por pax):</td><td style="padding:6px; text-align:left;">${escAttr(fmtCur(r.tax))}</td></tr>
           <tr><td style="padding:6px;">DU/Rav (por pax):</td><td style="padding:6px; text-align:left;">${escAttr(fmtCur(r.du))}</td></tr>
           <tr><td style="padding:6px;">Multa (por pax):</td><td style="padding:6px; text-align:left;">${escAttr(fmtCur(r.pen))}</td></tr>
+          ${r.penBRL > 0 ? `<tr><td style="padding:6px;">Multa em BRL (por pax, sem conversão):</td><td style="padding:6px; text-align:left;">${escAttr(fmtBRL(r.penBRL))}</td></tr>` : ""}
           <tr><td style="padding:6px;">RC (USD) (por pax):</td><td style="padding:6px; text-align:left;">${rcCell}</td></tr>
           <tr><td style="padding:6px;"><b>Total (por pax)</b></td><td style="padding:6px; text-align:left;"><b>${escAttr(fmtCur(r.perPax))}</b></td></tr>
           
@@ -4448,6 +4643,7 @@ function buildRfObsInter(){
 
       valueRows += `
         <tr><td style="padding:6px;"><b>TOTAL (${escAttr(calc.cur)})</b></td><td style="padding:6px; text-align:left;"><b>${escAttr(fmtCur(calc.totalCur))}</b></td></tr>
+        ${calc.penBRLTotal > 0 ? `<tr><td style="padding:6px;">Multa em BRL (total, já inclusa abaixo):</td><td style="padding:6px; text-align:left;">${escAttr(fmtBRL(calc.penBRLTotal))}</td></tr>` : ""}
         <tr><td><b>TOTAL A COBRAR (BRL)</b></td><td style="padding:6px; text-align:left;"><b>${escAttr(fmtBRL(calc.totalBRL))}</b></td></tr>
       `;
 
@@ -4566,6 +4762,7 @@ function buildRfObsInter(){
         <tr><td colspan="2" style="background-color:#f4cccc; font-weight:bold; padding:6px;">RENTABILIZAÇÃO</td></tr>
         <tr><td style="padding:6px;"><b>Tipo</b></td><td style="padding:6px;">${escAttr(rentTipos || "-")}</td></tr>
         <tr><td style="padding:6px;"><b>Moeda</b></td><td style="padding:6px;">${escAttr(calc.cur)}</td></tr>
+        ${(rd.multa && calc.penBRLTotal > 0) ? `<tr><td colspan="2" style="padding:6px; background-color:#fff4d6;"><b>Atenção:</b> a multa de ${escAttr(fmtBRL(calc.penBRLTotal))} foi informada em BRL e <b>não entra</b> na tabela de MULTA abaixo (que é na moeda ${escAttr(calc.cur)}). Confira a rentabilização da multa manualmente.</td></tr>` : ""}
         ${rd.multa ? `<tr><td colspan="2" style="padding:0 6px;">${rentItemTable("MULTA", cobM, pM)}</td></tr>` : ""}
         ${rd.diftar ? `<tr><td colspan="2" style="padding:0 6px;">${rentItemTable("DIF. TARIFA", cobT, pT)}</td></tr>` : ""}
         ${rd.diftax ? `<tr><td colspan="2" style="padding:0 6px;">${rentItemTable("DIF. TAXA", cobX, pX)}</td></tr>` : ""}
@@ -4724,7 +4921,9 @@ function buildSicaFormHtml(){
     ${mode === "INTER" && calc.fx > 0 ? row("Total (BRL)", `<b>${fmtBRL(sumCob * calc.fx)}</b>`, `<b>${fmtBRL(sumPago * calc.fx)}</b>`, true) : ""}
     ${row("Lucro", `<b style="color:${lucro>=0?'#0a7a33':'#b42318'}">${fmt(lucro)}</b>`, "", true)}
     ${mode === "INTER" && calc.fx > 0 ? row("Lucro (BRL)", `<b style="color:${(lucro*calc.fx)>=0?'#0a7a33':'#b42318'}">${fmtBRL(lucro * calc.fx)}</b>`, "", true) : ""}
-  </table>
+  </table>${(mode === "INTER" && calc.penBRLTotal > 0) ? `
+
+  <div style="margin-top:8px;padding:6px;border:1px solid #f0c36d;background:#fff4d6;"><b>Atenção:</b> a multa de ${escapeHtml(stripHtml(fmtBRL(calc.penBRLTotal)))} foi informada em BRL e <b>não está</b> na linha "Multa" acima (valores em ${escapeHtml(cur)}). Conferir a rentabilização da multa manualmente.</div>` : ""}
 
   <div style="margin-top:10px;">
     <b>Observações:</b> ${escapeHtml(obsTxt)}
@@ -4848,6 +5047,7 @@ async function copyHtmlToClipboard(html){
           tax: val(`inter_tax_${t}`),
           du: val(`inter_du_${t}`),
           pen: val(`inter_pen_${t}`),
+          penBRL: val(`inter_penbrl_${t}`), // multa ja em BRL (sem cambio)
           feeUSD: val(`inter_fee_${t}`), // RC sempre em USD
         });
       }
@@ -5001,6 +5201,7 @@ let __lastCiaForAzul = "";
         colType: "Tipo", colOldFare: "Tarifa antiga", colNewFare: "Tarifa nova",
         colDiffFare: "Dif. tarifa", colDiffTax: "Dif. taxa", colDU: "DU/Rav",
         colPen: "Multa", colFeeUsd: "RC (USD)", colPerPax: "Total por pax",
+        penBrl: "Multa em BRL (já em reais, sem conversão)", incMultaBrl: "(inclui a multa em BRL)",
         colTotalTipo: "Total (tipo)", totalToPay: "TOTAL A PAGAR (BRL)",
         totalCur: (cur)=>`TOTAL (${cur})`, noValues: "Sem valores informados.",
         servicesAbat: "Serviços (abatimento)", payMethod: "Forma de pagamento",
@@ -5035,6 +5236,7 @@ let __lastCiaForAzul = "";
         colType: "Type", colOldFare: "Old fare", colNewFare: "New fare",
         colDiffFare: "Fare diff.", colDiffTax: "Tax diff.", colDU: "DU/Rav",
         colPen: "Penalty", colFeeUsd: "RC (USD)", colPerPax: "Total per pax",
+        penBrl: "Penalty in BRL (already in reais, not converted)", incMultaBrl: "(includes the BRL penalty)",
         colTotalTipo: "Total (type)", totalToPay: "TOTAL DUE (BRL)",
         totalCur: (cur)=>`TOTAL (${cur})`, noValues: "No values informed.",
         servicesAbat: "Services (deduction)", payMethod: "Payment method",
@@ -5293,7 +5495,7 @@ document.getElementById("paxq_adt").value = "1";
       const data = {};
       for(const el of document.querySelectorAll("input, select, textarea")){
         if(!el.id) continue;
-        if(el.id === "obsCode" || el.id === "raCode") continue;
+        if(el.id === "obsCode" || el.id === "raCode" || el.id.startsWith("copilot_")) continue;
         if(el.type === "checkbox"){
           data[el.id] = !!el.checked;
         }else{
@@ -6054,7 +6256,7 @@ document.getElementById("btnCarregarRACode").addEventListener("click", async ()=
     }
 // reactive calc
     for(const el of document.querySelectorAll("input, select, textarea")){
-      if(el.id === "obsCode" || el.id === "raCode") continue;
+      if(el.id === "obsCode" || el.id === "raCode" || el.id.startsWith("copilot_")) continue;
       el.addEventListener("input", ()=>{ updateAll(); });
       el.addEventListener("change", ()=>{ updateAll(); });
     }
@@ -6170,6 +6372,129 @@ document.getElementById("btnCarregarRACode").addEventListener("click", async ()=
       if(footer) footer.textContent = `Versão: ${APP_VERSION}`;
     })();
 
+// ----- UI: "Ler print com o Copilot" (liga o JSON do Copilot aos campos; sem nenhuma chamada de rede) -----
+// Fluxo: Copiar prompt -> abrir o Copilot (janela nova, conta corporativa) -> anexar o print ->
+// copiar o JSON da resposta -> colar aqui: a previa (o que seria preenchido e o que fica em branco)
+// aparece sozinha -> "Aplicar nos campos". Nada e preenchido sem o clique em Aplicar.
+const COPILOT_CHAT_URL = "https://m365.cloud.microsoft/chat";
+let __copilotLeitura = null;
+
+function copilotValorTela(id){
+  const el = document.getElementById(id);
+  return el ? String(el.value || "").trim() : "";
+}
+
+function copilotHtmlResultado(r){
+  if(!r.ok){
+    return `<div class="note" style="margin-top:8px"><b>Não foi possível usar esta resposta.</b><br>${escapeHtml(r.erro)}</div>`;
+  }
+  const tipoTxt = r.tipo === "NAC" ? "Nacional" : "Internacional";
+  const linhas = r.campos.map(c => {
+    const atual = copilotValorTela(c.id);
+    const muda = atual && atual !== c.valor;
+    return `<tr><td>${escapeHtml(c.rotulo)}</td><td><b>${escapeHtml(c.exibe || c.valor)}</b></td><td class="muted">${atual ? escapeHtml(atual) + (muda ? " (será substituído)" : "") : "—"}</td></tr>`;
+  }).join("");
+  const branco = r.emBranco.length
+    ? `<div style="margin-top:8px"><b>Ficam em branco — preencher manualmente:</b><ul style="margin:4px 0 0 18px">${r.emBranco.map(b => `<li>${escapeHtml(b.rotulo)}: ${escapeHtml(b.motivo)}</li>`).join("")}</ul></div>`
+    : "";
+  const infos = r.infos.length
+    ? `<ul class="muted small" style="margin:8px 0 0 18px">${r.infos.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`
+    : "";
+  return `<div style="margin-top:8px">
+    <div><b>${escapeHtml(r.sistema.toUpperCase())}</b> • ${tipoTxt} • ${escapeHtml(r.moeda)} • linha ${escapeHtml(r.tipoPax)}</div>
+    <table style="width:100%;margin-top:6px;border-collapse:collapse"><tr class="muted"><td>Campo</td><td>Lido</td><td>Hoje na tela</td></tr>${linhas}</table>
+    ${branco}${infos}
+    <div class="row" style="margin-top:10px"><button class="action primary" id="btnCopilotAplicar" type="button">Aplicar nos campos</button></div>
+  </div>`;
+}
+
+// Compara o total da calculadora com o total final lido do print. Nunca altera nada.
+function copilotHtmlConferencia(r){
+  // total final lido do print; no NDC Amadeus (sem total na tela) usa "Diferença de preço" + "Multas" do sistema
+  const alvo = (r.totalLido !== null && r.totalLido !== undefined) ? r.totalLido : r.totalEsperado;
+  if(alvo === null || alvo === undefined) return "";
+  const origem = (r.totalLido !== null && r.totalLido !== undefined) ? "sistema" : "sistema (Diferença de preço + Multas)";
+  const calc = r.tipo === "NAC" ? calcNac() : calcInter();
+  const row = calc.rows.find(x => x.t === r.tipoPax);
+  if(!row) return `<li>Total do sistema: ${escapeHtml(fmtBRL(alvo))}. A QTD de ${escapeHtml(r.tipoPax)} está em 0, então a linha não entra no cálculo.</li>`;
+  let calcPorPax;
+  if(r.tipo === "NAC") calcPorPax = row.perPax;
+  else if(calc.fx > 0) calcPorPax = row.perPax * calc.fx + (row.penBRL || 0);
+  else return `<li>Total do sistema: ${escapeHtml(fmtBRL(alvo))}. Falta o câmbio na calculadora para conferir — quando ele carregar (ou você digitar), clique em <b>Conferir total</b>.</li>`;
+  const dif = calcPorPax - alvo;
+  const ok = Math.abs(dif) < 0.015;
+  const nota = (!ok && r.cambioImplicito) ? ` O print implica câmbio ${escapeHtml(r.cambioImplicito.toFixed(4).replace(".", ","))}; a calculadora usa ${escapeHtml(calc.fx.toFixed(4).replace(".", ","))}.` : "";
+  return `<li>${ok ? "✔ Total confere" : "⚠ Total diferente"}: ${origem} ${escapeHtml(fmtBRL(alvo))} • calculadora (por pax) ${escapeHtml(fmtBRL(calcPorPax))}${ok ? "" : " • diferença " + escapeHtml(fmtBRL(dif))}.${nota}</li>`;
+}
+
+function copilotAplica(){
+  const r = __copilotLeitura;
+  if(!r || !r.ok) return;
+  switchTab(r.tipo === "NAC" ? "tabNac" : "tabInter");
+  // No Internacional "Automatico" os campos de valor e a secao de dados ficam escondidos ate o
+  // "Concluir preenchimento": aplicar a leitura equivale a concluir, senao o atendente nao veria nada.
+  if(r.tipo === "INTER" && /autom/i.test(copilotValorTela("inter_tipo")) && typeof window.__interFinalizeAutoFlow === "function"){
+    window.__interFinalizeAutoFlow();
+  }
+  for(const c of r.campos){
+    const el = document.getElementById(c.id);
+    if(!el) continue;
+    el.value = c.valor;
+    // 'input' recalcula ao vivo e agenda o autosave; no seletor de moeda, 'change' busca o cambio do dia
+    el.dispatchEvent(new Event(c.select ? "change" : "input", { bubbles: true }));
+  }
+  const primeiro = r.campos.map(c => document.getElementById(c.id)).find(el => el && !el.matches("select"));
+  if(primeiro && primeiro.scrollIntoView) primeiro.scrollIntoView({ block: "center", behavior: "smooth" });
+  const qtyEl = document.getElementById((r.tipo === "NAC" ? "nac_qty_" : "inter_qty_") + r.tipoPax);
+  const semQtd = qtyEl && intVal(qtyEl.id) <= 0;
+  const out = document.getElementById("copilot_result");
+  out.innerHTML = `<div style="margin-top:8px"><b>Campos preenchidos (${r.campos.length}).</b> Confira com o print antes de gerar as saídas.
+    <ul style="margin:6px 0 0 18px">
+      ${semQtd ? `<li>⚠ A QTD de ${escapeHtml(r.tipoPax)} está em 0: ajuste a quantidade para esta linha entrar no cálculo.</li>` : ""}
+      ${r.emBranco.length ? `<li>⚠ Ficaram em branco: ${r.emBranco.map(b => escapeHtml(b.rotulo)).join(", ")}.</li>` : ""}
+      ${copilotHtmlConferencia(r)}
+    </ul>
+    ${copilotHtmlConferencia(r) ? `<div class="row" style="margin-top:8px"><button class="action" id="btnCopilotConferir" type="button">Conferir total</button></div>` : ""}
+  </div>`;
+  showToast("Campos preenchidos pelo Copilot. Confira antes de gerar.");
+}
+
+(function ligaCopilot(){
+  const jsonTA = document.getElementById("copilot_json");
+  if(!jsonTA) return;
+  document.getElementById("btnCopilotPrompt").addEventListener("click", async ()=>{
+    try{
+      await navigator.clipboard.writeText(COPILOT_PROMPT);
+      showToast("Prompt copiado. Cole no Copilot e anexe o print.");
+    }catch(e){
+      showToast("Não deu pra copiar automático. Libere a área de transferência do navegador.");
+    }
+  });
+  document.getElementById("btnCopilotAbrir").addEventListener("click", ()=>{
+    window.open(COPILOT_CHAT_URL, "_blank", "noopener,noreferrer");
+  });
+  // a previa aparece sozinha ao colar (ou ao trocar a linha de destino); caixa vazia limpa a previa
+  const atualizaPrevia = ()=>{
+    const out = document.getElementById("copilot_result");
+    if(!jsonTA.value.trim()){ __copilotLeitura = null; out.innerHTML = ""; return; }
+    __copilotLeitura = lerLeituraCopilot(jsonTA.value, document.getElementById("copilot_pax").value);
+    out.innerHTML = copilotHtmlResultado(__copilotLeitura);
+  };
+  jsonTA.addEventListener("input", atualizaPrevia);
+  document.getElementById("copilot_pax").addEventListener("change", ()=>{ if(jsonTA.value.trim()) atualizaPrevia(); });
+  // os botoes "Aplicar" e "Conferir" sao recriados a cada leitura: delegacao no container
+  document.getElementById("copilot_result").addEventListener("click", (e)=>{
+    const id = e.target && e.target.id;
+    if(id === "btnCopilotAplicar") copilotAplica();
+    if(id === "btnCopilotConferir" && __copilotLeitura && __copilotLeitura.ok){
+      const li = copilotHtmlConferencia(__copilotLeitura);
+      const out = document.getElementById("copilot_result");
+      const antigo = out.querySelector("[data-conf]");
+      if(antigo) antigo.remove();
+      out.insertAdjacentHTML("beforeend", `<ul data-conf style="margin:6px 0 0 18px">${li}</ul>`);
+    }
+  });
+})();
 
 </script>
 
