@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Calculadora de Reemissão • Gerador de cálculo de reemissão</title>
   <style>
-    .app-version-footer{position:fixed;right:12px;bottom:10px;z-index:9999;padding:6px 10px;border-radius:999px;background:rgba(15,23,42,.82);color:#fff;font:700 12px/1.2 var(--sans);letter-spacing:.02em;box-shadow:0 8px 22px rgba(0,0,0,.18);backdrop-filter:blur(8px);opacity:.92} 
-    :root[data-theme="light"] .app-version-footer{background:rgba(15,23,42,.78);color:#fff;border:1px solid rgba(255,255,255,.14)}
-    @media (max-width: 700px){.app-version-footer{right:8px;bottom:8px;font-size:11px;padding:5px 9px}}
 
     :root{
       --bg:#0b0f17;
@@ -1412,7 +1409,6 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
   <div class="toast" id="toast" role="status" aria-live="polite">Copiado!</div>
 
-  <div class="app-version-footer" id="appVersionFooter" aria-label="Versão da calculadora">Versão: 1.0.13-test</div>
 
   <script>
 
@@ -5226,7 +5222,7 @@ let __lastCiaForAzul = "";
         attention: "ATTENTION: PLEASE CHECK ALL DATA BEFORE APPROVING THE REISSUE.",
         valuesSubject: "VALUES SUBJECT TO CHANGE",
         cia: "Airline", prazo: "Deadline", prazoValue: "Immediate",
-        loc: "Locator", locCalc: "Calculation Locator", novoLoc: "New LOC",
+        loc: "Booking reference (PNR)", locCalc: "Booking reference (PNR)", novoLoc: "New booking reference (PNR)",
         paxTicket: "Passenger(s) / Ticket(s)", oac: "OAC",
         familia: "Fare Family", bag: "Baggage",
         parcelamento: "Installments allowed?", yes: "Yes", no: "No",
@@ -5250,7 +5246,7 @@ let __lastCiaForAzul = "";
         voosSimulados: "SIMULATED FLIGHTS", regras: "RULES", obs: "Notes:",
         noShowRule: "Requests made less than <b>2h</b> before the original departure may incur a <b>no-show</b> penalty.",
         azulRule: "For Azul reissues, any service already paid will be used as credit in the reissue recalculation and must be purchased again.",
-        latamGolRule: "If reissued under a new LOC, the original locator must be cancelled after the reissue.",
+        latamGolRule: "If reissued under a new booking reference, the original booking reference must be cancelled after the reissue.",
         noName: "(no name)", noTicket: "(no ticket)",
         subjectNac: (loc,cia)=> `Reissue calculation NAC${loc?" — "+loc:""}${cia?" — "+cia:""}`.trim(),
         subjectInter: (cur,loc,cia)=> `Reissue calculation INTER (${cur})${loc?" — "+loc:""}${cia?" — "+cia:""}`.trim(),
@@ -6365,12 +6361,6 @@ document.getElementById("btnCarregarRACode").addEventListener("click", async ()=
       }
     })();
 
-    // ----- Versão exibida no rodapé -----
-    (function initVersionFooter(){
-      const APP_VERSION = "1.0.13-test";
-      const footer = document.getElementById("appVersionFooter");
-      if(footer) footer.textContent = `Versão: ${APP_VERSION}`;
-    })();
 
 // ----- UI: "Ler print com o Copilot" (liga o JSON do Copilot aos campos; sem nenhuma chamada de rede) -----
 // Fluxo: Copiar prompt -> abrir o Copilot (janela nova, conta corporativa) -> anexar o print ->
