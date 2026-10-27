@@ -2590,17 +2590,21 @@ function lerLeituraCopilot(texto, tipoPax){
   let totalEsperado = null; // so Amadeus: "Diferença de preço" + "Multas" do proprio sistema (para conferir, nunca preenche)
 
   // le um campo numerico; se veio algo que nao e numero, vai para a lista de conferencia
-  const num = (chave, rotulo)=>{
+  // `ids` = campo(s) da tela que esse valor alimentaria: se nao foi lido, eles sao ZERADOS ao aplicar
+  const num = (chave, rotulo, ids)=>{
     const bruto = o[chave];
     if(bruto === null || bruto === undefined){
-      emBranco.push({ rotulo, motivo: "o Copilot não leu este valor no print" });
+      emBranco.push({ rotulo, motivo: "o Copilot não leu este valor no print", ids: [].concat(ids || []) });
       return null;
     }
     const n = copilotNumero(bruto);
-    if(n === null){ emBranco.push({ rotulo, motivo: `valor "${bruto}" não é um número válido` }); return null; }
+    if(n === null){ emBranco.push({ rotulo, motivo: `valor "${bruto}" não é um número válido`, ids: [].concat(ids || []) }); return null; }
     return n;
   };
   const poe = (id, rotulo, n)=>{ if(n !== null) campos.push({ id, rotulo, valor: copilotFmt(n) }); };
+  // A leitura e "dona" da linha do passageiro: o que ela nao preenche e ZERADO, para nao sobrar valor de
+  // outro calculo (ou de um rascunho antigo) misturado com este.
+  const limpa = (id, rotulo, exibe)=>{ campos.push({ id, rotulo, valor: "", exibe: exibe || "(em branco)" }); };
 
   const ehFarelogix = sistema === "ndc-farelogix";
   const ehAmadeus = sistema === "ndc-amadeus";
@@ -2618,20 +2622,32 @@ function lerLeituraCopilot(texto, tipoPax){
       campos.push({ id: "inter_cur_other", rotulo: "Moeda (código)", valor: moeda });
       campos.push({ id: "inter_cur", rotulo: "Moeda", valor: "OTHER", exibe: "Outra (código)", select: true });
     }
-    poe(`inter_fare_${T}`, `Dif. tarifa (${T})`, num("dif_tarifa", `Dif. tarifa (${T})`));
-    const taxas = ehAmadeus ? null : num("dif_taxas", `Dif. taxa (${T})`);
+    poe(`inter_fare_${T}`, `Dif. tarifa (${T})`, num("dif_tarifa", `Dif. tarifa (${T})`, `inter_fare_${T}`));
+    const taxas = ehAmadeus ? null : num("dif_taxas", `Dif. taxa (${T})`, `inter_tax_${T}`);
+    if(ehAmadeus) limpa(`inter_tax_${T}`, `Dif. taxa (${T})`, "(em branco: já está na Diferença de preço)");
     if(taxas !== null){
       // Farelogix mostra as taxas em BRL, e o campo da calculadora é na moeda de emissão: sem converter por conta propria
-      if(ehFarelogix && taxas !== 0) emBranco.push({ rotulo: `Dif. taxa (${T})`, motivo: `veio em BRL (${copilotFmt(taxas)}) e o campo é na moeda ${moeda}; lance manualmente` });
+      if(ehFarelogix && taxas !== 0) emBranco.push({ rotulo: `Dif. taxa (${T})`, motivo: `veio em BRL (${copilotFmt(taxas)}) e o campo é na moeda ${moeda}; lance manualmente`, ids: [`inter_tax_${T}`] });
       else poe(`inter_tax_${T}`, `Dif. taxa (${T})`, taxas);
     }
 
-    const multa = num("multa", `Multa (${T})`);
+    // Multa: so um dos dois campos (na moeda OU em BRL) recebe o valor; o outro e zerado. Multa 0 zera os dois.
+    const idPen = `inter_pen_${T}`, idPenBrl = `inter_penbrl_${T}`;
+    const multa = num("multa", `Multa (${T})`, [idPen, idPenBrl]);
     if(multa !== null){
-      if(multa === 0) infos.push("Multa: 0 (sem multa neste cálculo).");
-      else if(multaMoeda === moeda) poe(`inter_pen_${T}`, `Multa (${T})`, multa);
-      else if(multaMoeda === "BRL") poe(`inter_penbrl_${T}`, `Multa BRL (${T})`, multa);
-      else emBranco.push({ rotulo: `Multa (${T})`, motivo: `a moeda da multa não foi informada com clareza (${multaMoeda || "vazia"}); valor lido: ${copilotFmt(multa)}` });
+      if(multa === 0){
+        infos.push("Multa: 0 (sem multa neste cálculo); os campos de multa ficam zerados.");
+        limpa(idPen, `Multa (${T})`, "0 (sem multa)");
+        limpa(idPenBrl, `Multa BRL (${T})`, "0 (sem multa)");
+      }else if(multaMoeda === moeda){
+        poe(idPen, `Multa (${T})`, multa);
+        limpa(idPenBrl, `Multa BRL (${T})`);
+      }else if(multaMoeda === "BRL"){
+        poe(idPenBrl, `Multa BRL (${T})`, multa);
+        limpa(idPen, `Multa (${T})`);
+      }else{
+        emBranco.push({ rotulo: `Multa (${T})`, motivo: `a moeda da multa não foi informada com clareza (${multaMoeda || "vazia"}); valor lido: ${copilotFmt(multa)}`, ids: [idPen, idPenBrl] });
+      }
     }
     if(ehAmadeus){
       // "Diferença de preço" do NDC Amadeus = valor a cobrar de diferença (tarifa + impostos juntos, formula interna do
@@ -2657,13 +2673,16 @@ function lerLeituraCopilot(texto, tipoPax){
     if(String(o.moeda_emissao || "").trim().toUpperCase() !== "BRL"){
       return { ok:false, erro: "Cálculo Nacional deveria estar em BRL; o Copilot informou outra moeda. Confira o print." };
     }
-    poe(`nac_old_${T}`, `Tarifa antiga (${T})`, num("tarifa_antiga", `Tarifa antiga (${T})`));
-    poe(`nac_new_${T}`, `Tarifa nova (${T})`, num("tarifa_nova", `Tarifa nova (${T})`));
-    poe(`nac_tax_${T}`, `Dif. taxa (${T})`, num("dif_taxas", `Dif. taxa (${T})`));
-    const multa = num("multa", `Multa (${T})`);
+    poe(`nac_old_${T}`, `Tarifa antiga (${T})`, num("tarifa_antiga", `Tarifa antiga (${T})`, `nac_old_${T}`));
+    poe(`nac_new_${T}`, `Tarifa nova (${T})`, num("tarifa_nova", `Tarifa nova (${T})`, `nac_new_${T}`));
+    poe(`nac_tax_${T}`, `Dif. taxa (${T})`, num("dif_taxas", `Dif. taxa (${T})`, `nac_tax_${T}`));
+    const multa = num("multa", `Multa (${T})`, `nac_pen_${T}`);
     if(multa !== null){
-      if(multa === 0) infos.push("Multa: 0 (sem multa neste cálculo).");
-      else if(multaMoeda && multaMoeda !== "BRL") emBranco.push({ rotulo: `Multa (${T})`, motivo: `a multa veio em ${multaMoeda}, mas o Nacional é em BRL` });
+      if(multa === 0){
+        infos.push("Multa: 0 (sem multa neste cálculo); o campo de multa fica zerado.");
+        limpa(`nac_pen_${T}`, `Multa (${T})`, "0 (sem multa)");
+      }
+      else if(multaMoeda && multaMoeda !== "BRL") emBranco.push({ rotulo: `Multa (${T})`, motivo: `a multa veio em ${multaMoeda}, mas o Nacional é em BRL`, ids: [`nac_pen_${T}`] });
       else poe(`nac_pen_${T}`, `Multa (${T})`, multa);
     }
   }
@@ -6379,13 +6398,18 @@ function copilotHtmlResultado(r){
     return `<div class="note" style="margin-top:8px"><b>Não foi possível usar esta resposta.</b><br>${escapeHtml(r.erro)}</div>`;
   }
   const tipoTxt = r.tipo === "NAC" ? "Nacional" : "Internacional";
-  const linhas = r.campos.map(c => {
+  const linhas = r.campos.filter(c => !(c.valor === "" && !copilotValorTela(c.id))).map(c => {   // linha "zerar" so aparece se ha algo a zerar
     const atual = copilotValorTela(c.id);
     const muda = atual && atual !== c.valor;
-    return `<tr><td>${escapeHtml(c.rotulo)}</td><td><b>${escapeHtml(c.exibe || c.valor)}</b></td><td class="muted">${atual ? escapeHtml(atual) + (muda ? " (será substituído)" : "") : "—"}</td></tr>`;
+    const aviso = muda ? (c.valor === "" ? " (será zerado)" : " (será substituído)") : "";
+    return `<tr><td>${escapeHtml(c.rotulo)}</td><td><b>${escapeHtml(c.exibe || c.valor)}</b></td><td class="muted">${atual ? escapeHtml(atual) + aviso : "—"}</td></tr>`;
   }).join("");
+  // campos nao lidos tambem sao ZERADOS ao aplicar: a previa mostra o que existe hoje neles
   const branco = r.emBranco.length
-    ? `<div style="margin-top:8px"><b>Ficam em branco — preencher manualmente:</b><ul style="margin:4px 0 0 18px">${r.emBranco.map(b => `<li>${escapeHtml(b.rotulo)}: ${escapeHtml(b.motivo)}</li>`).join("")}</ul></div>`
+    ? `<div style="margin-top:8px"><b>Ficam em branco — preencher manualmente:</b><ul style="margin:4px 0 0 18px">${r.emBranco.map(b => {
+        const hoje = (b.ids || []).map(id => copilotValorTela(id)).filter(Boolean);
+        return `<li>${escapeHtml(b.rotulo)}: ${escapeHtml(b.motivo)}${hoje.length ? ` — hoje na tela: ${escapeHtml(hoje.join(" / "))} (será zerado)` : ""}</li>`;
+      }).join("")}</ul></div>`
     : "";
   const infos = r.infos.length
     ? `<ul class="muted small" style="margin:8px 0 0 18px">${r.infos.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`
@@ -6433,15 +6457,34 @@ function copilotAplica(){
     // 'input' recalcula ao vivo e agenda o autosave; no seletor de moeda, 'change' busca o cambio do dia
     el.dispatchEvent(new Event(c.select ? "change" : "input", { bubbles: true }));
   }
+  // O que a leitura nao conseguiu ler tambem e zerado: nao pode sobrar valor de outro calculo no lugar.
+  const zerados = [];
+  for(const b of r.emBranco){
+    for(const id of (b.ids || [])){
+      const el = document.getElementById(id);
+      if(!el || !el.value) continue;
+      zerados.push(`${b.rotulo} (era ${el.value})`);
+      el.value = "";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+  // Campos da mesma linha que a leitura nao toca: so avisa, nao mexe.
+  const naoTocados = (r.tipo === "NAC" ? [["nac_du_", "DU/Rav"]] : [["inter_du_", "DU/Rav"], ["inter_fee_", "RC USD"]])
+    .map(([pref, nome]) => ({ nome, v: copilotValorTela(pref + r.tipoPax) }))
+    .filter(x => x.v)
+    .map(x => `${x.nome} (${r.tipoPax}) ${x.v}`);
   const primeiro = r.campos.map(c => document.getElementById(c.id)).find(el => el && !el.matches("select"));
   if(primeiro && primeiro.scrollIntoView) primeiro.scrollIntoView({ block: "center", behavior: "smooth" });
   const qtyEl = document.getElementById((r.tipo === "NAC" ? "nac_qty_" : "inter_qty_") + r.tipoPax);
   const semQtd = qtyEl && intVal(qtyEl.id) <= 0;
   const out = document.getElementById("copilot_result");
-  out.innerHTML = `<div style="margin-top:8px"><b>Campos preenchidos (${r.campos.length}).</b> Confira com o print antes de gerar as saídas.
+  const lidos = r.campos.filter(c => c.valor !== "").length;
+  out.innerHTML = `<div style="margin-top:8px"><b>Campos preenchidos (${lidos}).</b> Confira com o print antes de gerar as saídas.
     <ul style="margin:6px 0 0 18px">
       ${semQtd ? `<li>⚠ A QTD de ${escapeHtml(r.tipoPax)} está em 0: ajuste a quantidade para esta linha entrar no cálculo.</li>` : ""}
       ${r.emBranco.length ? `<li>⚠ Ficaram em branco: ${r.emBranco.map(b => escapeHtml(b.rotulo)).join(", ")}.</li>` : ""}
+      ${zerados.length ? `<li>Zerados por não terem sido lidos: ${escapeHtml(zerados.join(", "))}.</li>` : ""}
+      ${naoTocados.length ? `<li>⚠ Mantidos como estavam (a leitura não toca neles): ${escapeHtml(naoTocados.join(", "))}. Confira se são deste cálculo.</li>` : ""}
       ${copilotHtmlConferencia(r)}
     </ul>
     ${copilotHtmlConferencia(r) ? `<div class="row" style="margin-top:8px"><button class="action" id="btnCopilotConferir" type="button">Conferir total</button></div>` : ""}
