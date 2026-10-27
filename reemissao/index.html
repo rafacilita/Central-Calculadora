@@ -751,12 +751,13 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
         <details class="note" id="copilotBox" style="margin-top:10px">
           <summary><b>Ler print com o Copilot</b> <span class="muted small">(E-Latam / E-Gol • opcional)</span></summary>
           <div class="muted small" style="margin-top:6px">
-            <b>Copiar prompt</b> &rarr; <b>Abrir Copilot</b>, cole o prompt e anexe o print &rarr; cole a resposta (JSON) aqui embaixo.
+            Abra o <b>Leitor de Reemissão</b> (agente do Copilot), anexe o print e cole a resposta (JSON) aqui embaixo.
+            Sem acesso ao agente? Use <b>Copiar prompt</b> e cole em qualquer chat do Copilot.
             O print vai só para o Copilot corporativo; a calculadora não envia nada para fora.
           </div>
           <div class="row" style="margin-top:8px">
+            <button class="action primary" id="btnCopilotAbrir" type="button">Abrir Leitor de Reemissão ↗</button>
             <button class="action" id="btnCopilotPrompt" type="button">Copiar prompt</button>
-            <button class="action" id="btnCopilotAbrir" type="button">Abrir Copilot ↗</button>
             <div>
               <label>Aplicar na linha de</label>
               <select id="copilot_pax"><option value="ADT">ADT</option><option value="CHD">CHD</option><option value="INF">INF</option></select>
@@ -6385,7 +6386,8 @@ document.getElementById("btnCarregarRACode").addEventListener("click", async ()=
 // Fluxo: Copiar prompt -> abrir o Copilot (janela nova, conta corporativa) -> anexar o print ->
 // copiar o JSON da resposta -> colar aqui: a previa (o que seria preenchido e o que fica em branco)
 // aparece sozinha -> "Aplicar nos campos". Nada e preenchido sem o clique em Aplicar.
-const COPILOT_CHAT_URL = "https://m365.cloud.microsoft/chat";
+// Agente "Leitor de Reemissão" (Copilot corporativo). Se o agente mudar, troque aqui o link de "Compartilhar > Copiar link".
+const COPILOT_CHAT_URL = "https://m365.cloud.microsoft/chat/?titleId=T_a7855ca7-1c8d-293a-07fd-2e0565ce578e&source=embedded-builder";
 let __copilotLeitura = null;
 
 function copilotValorTela(id){
