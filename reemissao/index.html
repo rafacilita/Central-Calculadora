@@ -169,6 +169,18 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
       box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.15) inset;
       background: rgba(var(--accent-rgb),.14);
     }
+    /* fluxo unico: titulos de etapa, metodo dos valores e conferencia */
+    .stepTitle{ font-weight:900; font-size:14px; margin:2px 0 8px; }
+    .methodRow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 10px; }
+    .methodTabs .tab{ padding:6px 12px; font-weight:700; }
+    #copilotAnchorNac, #copilotAnchorInter{ margin-bottom:10px; }
+    .readiness{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
+    .rdyChip{ border:1px solid rgba(255,255,255,.14); border-radius:999px; padding:4px 10px; font-size:12px; font-weight:700; }
+    .rdyChip.ok{ border-color: rgba(61,220,151,.5); background: rgba(61,220,151,.12); }
+    .rdyChip.warn{ border-color: rgba(255,204,102,.55); background: rgba(255,204,102,.14); }
+    :root[data-theme="light"] .rdyChip{ border-color: rgba(15,23,42,.18); }
+    :root[data-theme="light"] .rdyChip.ok{ border-color: rgba(10,122,51,.45); background: rgba(10,122,51,.10); }
+    :root[data-theme="light"] .rdyChip.warn{ border-color: rgba(180,120,0,.5); background: rgba(255,204,102,.28); }
     .grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     @media (max-width: 520px){ .grid{grid-template-columns:1fr} }
     label{ display:block; font-size:12px; color: var(--muted); margin: 0 0 6px; }
@@ -748,24 +760,6 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
       <div class="bd">
         <div class="note" id="tipBox"></div>
-        <details class="note" id="copilotBox" style="margin-top:10px">
-          <summary><b>Ler print com o Copilot</b> <span class="muted small">(E-Latam / E-Gol • opcional)</span></summary>
-          <div class="muted small" style="margin-top:6px">
-            Abra o <b>Leitor de Reemissão</b> (agente do Copilot), anexe o print e cole a resposta (JSON) aqui embaixo.
-            Sem acesso ao agente? Use <b>Copiar prompt</b> e cole em qualquer chat do Copilot.
-            O print vai só para o Copilot corporativo; a calculadora não envia nada para fora.
-          </div>
-          <div class="row" style="margin-top:8px">
-            <button class="action primary" id="btnCopilotAbrir" type="button">Abrir Leitor de Reemissão ↗</button>
-            <button class="action" id="btnCopilotPrompt" type="button">Copiar prompt</button>
-            <div>
-              <label>Aplicar na linha de</label>
-              <select id="copilot_pax"><option value="ADT">ADT</option><option value="CHD">CHD</option><option value="INF">INF</option></select>
-            </div>
-          </div>
-          <textarea id="copilot_json" rows="5" placeholder="Cole aqui a resposta (JSON) do Copilot" style="margin-top:8px"></textarea>
-          <div id="copilot_result"></div>
-        </details>
         <div id="rentSection" class="rentSection">
           <label class="rentToggle"><input id="rentab" type="checkbox" /> <span>Rentabilização</span></label>
           <div class="rentHint">Uso interno — não vai para agência. Entra apenas na OBS (RF) para o CCO. (adiciona @# no final do CRR no e-mail)</div>
@@ -1040,11 +1034,8 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
         <!-- PANELS -->
         <div id="panelNac" role="tabpanel" aria-labelledby="tabNac">
+          <div class="stepTitle">Passageiros e reserva</div>
           <div id="commonAnchorNac"></div>
-          <div class="muted small"><b>Nacional</b> — valores em BRL (R$). Dif. tarifa = (Tarifa nova − Tarifa antiga).</div>
-
-          <div class="hr"></div>
-
           <div class="row">
             <div>
               <label>Forma de pagamento</label>
@@ -1060,6 +1051,17 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
           </div>
 
           <div class="hr"></div>
+
+          <div class="stepTitle">Valores</div>
+          <div class="muted small" style="margin-bottom:6px"><b>Nacional</b> — valores em BRL (R$). Dif. tarifa = (Tarifa nova − Tarifa antiga).</div>
+          <div class="methodRow">
+            <span class="muted small">Como trazer os valores?</span>
+            <div class="tabs methodTabs" role="tablist" id="methodTabsNac" aria-label="Como trazer os valores (Nacional)">
+              <button class="tab" type="button" role="tab" data-method="manual" aria-selected="true">Digitar</button>
+              <button class="tab" type="button" role="tab" data-method="print" aria-selected="false">Print com Copilot</button>
+            </div>
+          </div>
+          <div id="copilotAnchorNac"></div>
 
           <div class="muted small"><b>Valores por tipo de pax</b></div>
           <div class="hr"></div>
@@ -1144,6 +1146,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
           <div class="hr"></div>
 
+                    <div class="stepTitle">1) Dados do cálculo</div>
           <div class="grid">
             <div>
               <label>Moeda</label>
@@ -1175,8 +1178,8 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
                 <option>Sim</option>
               </select>
             </div>
-            <div>
-              <label>Tipo de cálculo</label>
+            <div class="hidden" aria-hidden="true">
+              <label>Tipo de cálculo (deduzido pelo app)</label>
               <select id="inter_tipo">
                 <option>Manual</option>
                 <option>Automático</option>
@@ -1198,20 +1201,35 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
           <div class="hr"></div>
 
-                    <div id="interFxqIntro" class="note" style="border-left:3px solid rgba(var(--accent-rgb),.65); background: rgba(var(--accent-rgb),.10);">
-            <div class="muted small"><b>Automático (Amadeus FXQ/FXO)</b> — fluxo: <b>1)</b> cole a máscara do PNR → <b>2)</b> cole o FXO por tipo → <b>3)</b> cole FA/FHE dos bilhetes.</div>
-            <div class="muted small" id="fxqStatus" role="status" aria-live="polite" style="margin-top:6px"></div>
+          <div class="stepTitle">2) Passageiros e reserva</div>
+          <div class="muted small" style="margin-bottom:8px">
+            Cole o <b>PNR</b> (<code>RP/…</code>) para preencher passageiros, LOC, quantidades, itinerário, bagagem e família. Cole os <b>bilhetes</b> (FA/FHE) para preencher os números.
+            Tudo continua editável nos campos abaixo.
+          </div>
+          <label id="lbl_inter_voos" for="inter_voos">Itinerário / PNR</label>
+          <textarea id="inter_voos" placeholder="Cole o PNR (RP/...) do Amadeus ou os voos simulados (um por linha)"></textarea>
+          <div class="muted small" id="fxqStatus" role="status" aria-live="polite" style="margin-top:6px"></div>
+
+          <label id="lbl_inter_original" for="inter_original" style="margin-top:10px">Bilhetes (FA/FHE/TKT) — opcional</label>
+          <textarea id="inter_original" placeholder="Cole aqui FA/FHE ou máscara TKT (com /P1, /P2... quando houver) ou os dados do bilhete original"></textarea>
+          <div class="muted small" id="ticketsStatus" role="status" aria-live="polite" style="margin-top:6px"></div>
+
+          <div id="commonAnchorInter"></div>
+
+          <div class="hr" id="hrValuesSep"></div>
+
+          <div class="stepTitle">3) Valores</div>
+          <div class="methodRow">
+            <span class="muted small">Como trazer os valores?</span>
+            <div class="tabs methodTabs" role="tablist" id="methodTabsInter" aria-label="Como trazer os valores (Internacional)">
+              <button class="tab" type="button" role="tab" data-method="manual" aria-selected="true">Digitar</button>
+              <button class="tab" type="button" role="tab" data-method="fxo" aria-selected="false">FXO (Amadeus)</button>
+              <button class="tab" type="button" role="tab" data-method="print" aria-selected="false">Print com Copilot</button>
+            </div>
           </div>
 
-          <div class="hr"></div>
-
-          <label id="lbl_inter_voos">1) Itinerário / Máscara (cole o PNR)</label>
-          <textarea id="inter_voos" placeholder="Cole aqui RP/... com PAX + segmentos (Amadeus)."></textarea>
-
-          <div class="hr"></div>
-
           <div id="fxoWrap" class="hidden">
-            <div class="muted small"><b>2) Recálculo por tipo (FXO)</b> — cole o FXO (ou FXQ) de cada tipo abaixo. O sistema preenche Dif. tarifa, Multa e Dif. taxas automaticamente.</div>
+            <div class="muted small"><b>Recálculo por tipo (FXO)</b> — cole o FXO (ou FXQ) de cada tipo abaixo. O sistema preenche Dif. tarifa, Multa e Dif. taxas automaticamente.</div>
             <div class="hr"></div>
 
             <div id="fxoBox_ADT_wrap" class="hidden">
@@ -1233,29 +1251,26 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
             </div>
           </div>
 
-          <div id="manualInternoWrap">
-            <label>Cálculo (uso interno) — opcional</label>
-            <textarea id="inter_interno" placeholder="Cole aqui observações internas / máscara / prints (não enviar ao cliente se não quiser)"></textarea>
-            <div class="muted small" id="inter_interno_count">0 caracteres</div>
+          <div id="copilotAnchorInter">
+        <div class="note hidden" id="copilotBox" style="margin-top:6px">
+          <div style="font-weight:800">Print com Copilot <span class="muted small">(E-Latam / E-Gol / NDC • opcional)</span></div>
+          <div class="muted small" style="margin-top:6px">
+            Abra o <b>Leitor de Reemissão</b> (agente do Copilot), anexe o print e cole a resposta (JSON) aqui embaixo.
+            Sem acesso ao agente? Use <b>Copiar prompt</b> e cole em qualquer chat do Copilot.
+            O print vai só para o Copilot corporativo; a calculadora não envia nada para fora.
           </div>
-
-          <div class="hr"></div>
-
-          <div id="ticketsWrap" class="hidden">
-            <label id="lbl_inter_original">3) Bilhetes (FA/FHE/TKT)</label>
-            <textarea id="inter_original" placeholder="Cole aqui FA/FHE ou máscara TKT (com /P1, /P2... quando houver)"></textarea>
-            <div class="muted small" id="ticketsStatus" role="status" aria-live="polite" style="margin-top:6px"></div>
+          <div class="row" style="margin-top:8px">
+            <button class="action primary" id="btnCopilotAbrir" type="button">Abrir Leitor de Reemissão ↗</button>
+            <button class="action" id="btnCopilotPrompt" type="button">Copiar prompt</button>
+            <div>
+              <label>Aplicar na linha de</label>
+              <select id="copilot_pax"><option value="ADT">ADT</option><option value="CHD">CHD</option><option value="INF">INF</option></select>
+            </div>
           </div>
-          <div id="btnFinalizarAutoWrap" class="hidden" style="margin-top:10px">
-            <button class="action primary" id="btnFinalizarAuto" type="button">Concluir preenchimento</button>
-            <div class="muted small" style="margin-top:6px">Libera os campos de valor e a geração das saídas. Se algum dado não veio automático, dá pra preencher manualmente antes de gerar.</div>
+          <textarea id="copilot_json" rows="5" placeholder="Cole aqui a resposta (JSON) do Copilot" style="margin-top:8px"></textarea>
+          <div id="copilot_result"></div>
+        </div>
           </div>
-
-          <div class="hr" id="hrCommonSep"></div>
-
-          <div id="commonAnchorInter"></div>
-
-          <div class="hr" id="hrValuesSep"></div>
 
           <div id="interValuesWrap">
           <div class="muted small"><b>Valores por tipo de pax (na moeda selecionada • RC sempre em USD • Multa BRL já em reais, sem conversão)</b></div>
@@ -1307,6 +1322,14 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
           <div class="hr"></div>
 
+          <div id="manualInternoWrap">
+            <label>Cálculo (uso interno) — opcional</label>
+            <textarea id="inter_interno" placeholder="Cole aqui observações internas / máscara / prints (não enviar ao cliente se não quiser)"></textarea>
+            <div class="muted small" id="inter_interno_count">0 caracteres</div>
+          </div>
+
+          <div class="hr"></div>
+
           <!-- INTER: Endosso (texto livre) -->
           <div class="row" style="margin-top:10px">
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
@@ -1350,6 +1373,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
         <span class="pill" id="subjectPill">Assunto: —</span>
       </div>
       <div class="bd">
+        <div class="readiness" id="readiness" role="status" aria-live="polite" aria-label="Conferência antes de gerar"></div>
         <div class="outputsTabs" role="tablist" aria-label="Saídas da calculadora">
           <button type="button" class="outputTabBtn" id="outTabBtnAgency" data-output-tab="agency" aria-selected="true">Agência</button>
           <button type="button" class="outputTabBtn" id="outTabBtnCco" data-output-tab="cco" aria-selected="false">CCO</button>
@@ -5108,29 +5132,14 @@ async function copyHtmlToClipboard(html){
     // ---------- copy ----------
         
     // ---------- UI ----------
+    // Fluxo unico: nada fica escondido ate "concluir". Os campos de passageiro e de valor estao sempre visiveis e
+    // editaveis; cada colagem (PNR, bilhetes, FXO, print do Copilot) so PREENCHE campos. As flags abaixo ficam
+    // por compatibilidade com o CRR e com a deducao do "Tipo de calculo" (ver 85-ui-fluxo.js).
     window.__interFinalized = false;
     window.__interPaxReady = false;
     function updateFlowVisibility(){
-      const nacOn = document.getElementById("tabNac").getAttribute("aria-selected") === "true";
-      const valuesWrap = document.getElementById("interValuesWrap");
-      const commonWrap = document.getElementById("commonSection");
       const outputsCard = document.getElementById("outputsCard");
-      const finalizeWrap = document.getElementById("btnFinalizarAutoWrap");
-      const hrCommonSep = document.getElementById("hrCommonSep");
-      const hrValuesSep = document.getElementById("hrValuesSep");
-      const modeSel = document.getElementById("inter_tipo");
-      const modeVal = modeSel ? modeSel.value : "Manual";
-      const isAutoLike = /autom/i.test(modeVal || "");
-      const isHybrid = modeVal === "Automático com dados manuais";
-      const showValues = nacOn ? true : (!isAutoLike || (isHybrid && window.__interPaxReady) || window.__interFinalized);
-      if(valuesWrap) valuesWrap.classList.toggle("hidden", !showValues);
-      if(commonWrap) commonWrap.classList.toggle("hidden", !showValues);
-      if(hrCommonSep) hrCommonSep.classList.toggle("hidden", !showValues);
-      if(hrValuesSep) hrValuesSep.classList.toggle("hidden", !showValues);
-      // Saídas (inclui a aba "Carregar CRR") fica sempre visível, mesmo no meio do fluxo guiado Automático,
-      // pra permitir carregar um CRR salvo sem precisar trocar de modo antes.
       if(outputsCard) outputsCard.classList.toggle("hidden", false);
-      if(finalizeWrap) finalizeWrap.classList.toggle("hidden", nacOn || !isAutoLike || window.__interFinalized);
     }
     function switchTab(which){
       const nacOn = (which === "tabNac");
@@ -5153,6 +5162,7 @@ async function copyHtmlToClipboard(html){
       if(oacW) oacW.classList.toggle("hidden", !nacOn);
       placeRentPanel();
       placeCommonSection();
+      refreshValuesMethodUI();
       updateAll({silent:true});
       renderPaxFields();
       updateFlowVisibility();
@@ -5486,8 +5496,7 @@ document.getElementById("paxq_adt").value = "1";
         const el = document.getElementById(id);
         if(el) el.textContent = "";
       }
-      const _ticketsWrap = document.getElementById("ticketsWrap");
-      if(_ticketsWrap) _ticketsWrap.classList.add("hidden");
+      window.__valMethod = { NAC: "manual", INTER: "manual" };   // o metodo dos valores volta para "Digitar"
       const _subjPill = document.getElementById("subjectPill");
       if(_subjPill) _subjPill.textContent = "Assunto: —";
       const _rfp = document.getElementById("rentFormPreview");
@@ -5603,16 +5612,6 @@ document.getElementById("paxq_adt").value = "1";
         parseMeta: {warnings:[], segments:[], confidence:0, loc:""}
       };
 
-      function isInterAuto(){
-        const sel = $("inter_tipo");
-        return sel && String(sel.value||"").toLowerCase().includes("autom");
-      }
-
-      function isInterHybrid(){
-        const sel = $("inter_tipo");
-        return !!(sel && String(sel.value||"") === "Automático com dados manuais");
-      }
-
       function setStatus(msg){
         const el = $("fxqStatus");
         if(el) el.textContent = msg || "";
@@ -5642,10 +5641,8 @@ document.getElementById("paxq_adt").value = "1";
         if(!pax.length){
           setStatus("Cole a máscara do PNR (RP/...) contendo passageiros.");
           window.__interPaxReady = false;
-          show($("fxoWrap"), false);
-          show($("interValuesWrap"), false);
-          show($("ticketsWrap"), false);
-          if(typeof updateFlowVisibility === 'function') updateFlowVisibility();
+          state.paxList = [];
+          updateDerivedTipo();
           return false;
         }
         window.__interPaxReady = true;
@@ -5688,20 +5685,12 @@ document.getElementById("paxq_adt").value = "1";
         const bagEl = $("bag"); if(bagEl){ bagEl.value = ""; delete bagEl.dataset.auto; }
         const famEl = $("familia"); if(famEl && famEl.dataset.auto === "1"){ famEl.value = ""; delete famEl.dataset.auto; }
 
-        if(isInterHybrid()){
-          show($("fxoWrap"), false);
-          show($("interValuesWrap"), true);
-          show($("ticketsWrap"), true);
-        } else {
-          show($("fxoWrap"), true);
-          for(const t of ["ADT","CHD","INF"]){
-            show($(`fxoBox_${t}_wrap`), state.requiredTypes.includes(t));
-            const st = $(`fxoBox_${t}_status`); if(st) st.textContent = "";
-          }
-          show($("ticketsWrap"), false);
+        for(const t of ["ADT","CHD","INF"]){
+          const st = $(`fxoBox_${t}_status`); if(st) st.textContent = "";
         }
         if($("ticketsStatus")) $("ticketsStatus").textContent = "";
-        if(typeof updateFlowVisibility === 'function') updateFlowVisibility();
+        refreshValuesMethodUI();
+        updateDerivedTipo();
 
         if(parsed.loc && $("loc") && !$("loc").value.trim()) $("loc").value = parsed.loc;
 
@@ -5785,6 +5774,7 @@ document.getElementById("paxq_adt").value = "1";
         const ta = $(`fxoBox_${type}`);
         const st = $(`fxoBox_${type}_status`);
         if(!ta) return;
+        updateDerivedTipo();
         const parsed = parseFxoBlock(ta.value || '', type);
         syncInternoFromBoxes();
         const wantCur = (typeof getInterCurrency === 'function') ? getInterCurrency() : 'USD';
@@ -5848,8 +5838,6 @@ document.getElementById("paxq_adt").value = "1";
           const box = $(`fxoBox_${t}`);
           return box && String(box.value||'').trim();
         });
-        const canOpenTickets = allOk || allFilled;
-        show($("ticketsWrap"), canOpenTickets);
         if($("ticketsStatus")){
           if(allOk){
             $("ticketsStatus").textContent = 'Agora cole FA/FHE/TKT que eu distribuo nos passageiros.';
@@ -5947,72 +5935,22 @@ document.getElementById("paxq_adt").value = "1";
         if(applied) showToast('Bilhetes preenchidos no PAX');
       }
 
-      function applyInterTipoUI(){
-        const auto = isInterAuto();
-        const hybrid = isInterHybrid();
-        const manualWrap = $("manualInternoWrap");
-        const lblVoos = $("lbl_inter_voos"); const voosTA = $("inter_voos");
-        const lblTk = $("lbl_inter_original"); const tkTA = $("inter_original");
-        if(auto){
-          if(lblVoos) lblVoos.textContent = '1) Itinerário / Máscara (cole o PNR)';
-          if(voosTA) voosTA.placeholder = 'Cole aqui RP/... com PAX + segmentos (Amadeus).';
-          if(lblTk) lblTk.textContent = '3) Bilhetes (FA/FHE/TKT)';
-          if(tkTA) tkTA.placeholder = 'Cole aqui FA/FHE ou máscara TKT (com /P1, /P2... quando houver)';
-          if(manualWrap) manualWrap.classList.add('hidden');
-          const parsed = parsePassengersData(voosTA?.value || '');
-          window.__interPaxReady = !!parsed.pax.length;
-          if(hybrid){
-            show($("fxoWrap"), false);
-            if(parsed.pax.length) show($("interValuesWrap"), true);
-            show($("ticketsWrap"), parsed.pax.length ? true : false);
-          } else {
-            if(parsed.pax.length) show($("fxoWrap"), true);
-            show($("ticketsWrap"), false);
-          }
-        } else {
-          if(lblVoos) lblVoos.textContent = 'Voos simulados (opcional)';
-          if(voosTA) voosTA.placeholder = 'Cole aqui os voos simulados (um por linha)';
-          if(lblTk) lblTk.textContent = 'Bilhete original (opcional)';
-          if(tkTA) tkTA.placeholder = 'Cole aqui dados do bilhete original';
-          if(manualWrap) manualWrap.classList.remove('hidden');
-          show($("fxoWrap"), false);
-          show($("ticketsWrap"), true);
-          setStatus('');
-        }
-        if(typeof updateFlowVisibility === 'function') updateFlowVisibility();
-      }
-
+      // O "Tipo de calculo" nao e mais escolhido: e DEDUZIDO (updateDerivedTipo, em 85-ui-fluxo.js).
+      // Estas funcoes ficam so porque o CRR4 e o carregamento de CRR antigos ainda as chamam.
+      function applyInterTipoUI(){ refreshValuesMethodUI(); }
       window.__interApplyInterTipoUI = applyInterTipoUI;
-
-      function finalizeAutoFlow(){
-        window.__interFinalized = true;
-        show($("interValuesWrap"), true);
-        show($("outputsCard"), true);
-        if(typeof updateFlowVisibility === 'function') updateFlowVisibility();
-        showToast('Preenchimento concluído — campos liberados para edição');
-      }
+      function finalizeAutoFlow(){ window.__interFinalized = true; }   // nada mais fica escondido ate "concluir"
       window.__interFinalizeAutoFlow = finalizeAutoFlow;
 
-      function maybeAutoFromPnr(val){
-        if(isInterAuto()) return;
-        if(/(^|\n)\s*RP\//i.test(String(val||''))){
-          const sel = $("inter_tipo");
-          if(sel){ window.__interFinalized = false; window.__interPaxReady = false; sel.value = 'Automático'; applyInterTipoUI(); }
-        }
-      }
-
-      const interTipo = $("inter_tipo");
-      if(interTipo) interTipo.addEventListener('change', ()=>{ window.__interFinalized = false; window.__interPaxReady = false; applyInterTipoUI(); });
-
-      const btnFinalizarAuto = $("btnFinalizarAuto");
-      if(btnFinalizarAuto) btnFinalizarAuto.addEventListener('click', finalizeAutoFlow);
-
+      // PNR colado no Itinerario: preenche passageiros, LOC, quantidades, itinerario, bagagem e familia.
+      // Texto que nao e PNR (voos simulados) fica como texto livre, sem mexer em nada.
       const it = $("inter_voos");
       if(it){
         const runPnr = ()=>{
-          maybeAutoFromPnr(it.value);
-          if(!isInterAuto()) return;
-          const parsed = parsePassengersData(it.value);
+          const val = it.value || '';
+          const parsed = parsePassengersData(val);
+          const pareceRP = /(^|\n)\s*RP\//i.test(val);
+          if(!parsed.pax.length && !pareceRP){ if(state.paxList.length) return; setStatus(''); return; }
           applyPassengerData(parsed);
         };
         it.addEventListener('paste', ()=> setTimeout(runPnr, 0));
@@ -6022,14 +5960,15 @@ document.getElementById("paxq_adt").value = "1";
       ['ADT','CHD','INF'].forEach(t=>{
         const ta = $(`fxoBox_${t}`);
         if(!ta) return;
-        const run = ()=>{ if(isInterAuto()) applyFxForType(t); };
+        const run = ()=>{ applyFxForType(t); };
         ta.addEventListener('paste', ()=> setTimeout(run, 0));
         ta.addEventListener('input', ()=>{ clearTimeout(ta.__fxq_t); ta.__fxq_t = setTimeout(run, 250); });
       });
 
+      // Bilhetes (FA/FHE/TKT): distribuem o numero nos passageiros. Texto livre (bilhete original) so nao casa.
       const tk = $("inter_original");
       if(tk){
-        const run = ()=>{ if(isInterAuto()) applyTickets(); };
+        const run = ()=>{ applyTickets(); };
         tk.addEventListener('paste', ()=> setTimeout(run, 0));
         tk.addEventListener('input', ()=>{ clearTimeout(tk.__fxq_t); tk.__fxq_t = setTimeout(run, 250); });
       }
@@ -6382,6 +6321,129 @@ document.getElementById("btnCarregarRACode").addEventListener("click", async ()=
     })();
 
 
+// ----- UI: fluxo unico (passageiros e reserva -> valores -> conferir) -----
+// Antes havia um seletor "Tipo de calculo" (Manual / Automatico / Automatico com dados manuais) que misturava duas
+// perguntas: de onde vem o PASSAGEIRO (PNR colado ou digitado) e de onde vem o VALOR (FXO, print ou digitado). Isso
+// escondia campos ate "Concluir preenchimento" e nao permitia PNR + print do Copilot.
+// Agora tudo fica visivel e editavel; cada colagem e um "assistente" que preenche campos. O que se escolhe e o
+// METODO DOS VALORES (Digitar / FXO / Print com Copilot), que so decide qual assistente aparece.
+// "Tipo de calculo" continua existindo (campo do CRR4 e linha do e-mail da agencia), mas e DEDUZIDO, nao escolhido.
+
+const VALUES_METHODS = { NAC: ["manual", "print"], INTER: ["manual", "fxo", "print"] };
+
+function valMethodState(){
+  if(!window.__valMethod) window.__valMethod = { NAC: "manual", INTER: "manual" };
+  return window.__valMethod;
+}
+
+function setValuesMethod(mode, method){
+  const st = valMethodState();
+  st[mode] = VALUES_METHODS[mode].includes(method) ? method : "manual";
+  refreshValuesMethodUI();
+}
+
+// A caixa do Copilot e uma so: mora no ancora do modo ativo, logo acima dos campos de valor.
+function placeCopilotBox(){
+  const box = document.getElementById("copilotBox");
+  const anchor = document.getElementById(getActiveMode() === "INTER" ? "copilotAnchorInter" : "copilotAnchorNac");
+  if(box && anchor && box.parentNode !== anchor) anchor.appendChild(box);
+}
+
+function refreshValuesMethodUI(){
+  const st = valMethodState();
+  const mode = getActiveMode();
+  for(const [md, id] of [["NAC", "methodTabsNac"], ["INTER", "methodTabsInter"]]){
+    const row = document.getElementById(id);
+    if(!row) continue;
+    row.querySelectorAll("[data-method]").forEach(b => b.setAttribute("aria-selected", b.dataset.method === st[md] ? "true" : "false"));
+  }
+  placeCopilotBox();
+  const box = document.getElementById("copilotBox");
+  if(box) box.classList.toggle("hidden", st[mode] !== "print");
+
+  const fxoWrap = document.getElementById("fxoWrap");
+  const showFxo = mode === "INTER" && st.INTER === "fxo";
+  if(fxoWrap) fxoWrap.classList.toggle("hidden", !showFxo);
+  for(const t of ["ADT", "CHD", "INF"]){
+    const w = document.getElementById(`fxoBox_${t}_wrap`);
+    const q = document.getElementById(`paxq_${t.toLowerCase()}`);
+    if(w) w.classList.toggle("hidden", !(q && toIntSafe(q.value) > 0));
+  }
+}
+
+// "Tipo de calculo" deduzido: PNR lido + FXO usado = Automatico; PNR lido + valores de outra origem (digitados ou
+// print) = Automatico com dados manuais; sem PNR = Manual. Chamado quando o PNR ou o FXO mudam e nunca ao carregar um
+// CRR (o CRR guarda o tipo do calculo que foi enviado).
+function updateDerivedTipo(){
+  const sel = document.getElementById("inter_tipo");
+  if(!sel) return;
+  const wiz = window.__FXQ_WIZ;
+  const pnr = !!(wiz && Array.isArray(wiz.paxList) && wiz.paxList.length);
+  const fxo = ["ADT", "CHD", "INF"].some(t => { const ta = document.getElementById(`fxoBox_${t}`); return ta && ta.value.trim(); });
+  const v = pnr ? (fxo ? "Automático" : "Automático com dados manuais") : "Manual";
+  if(sel.value !== v){
+    sel.value = v;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));   // salva o rascunho e recalcula
+  }
+}
+
+// Conferencia antes de gerar: no lugar do botao "Concluir preenchimento", mostra o que ainda falta. So informa.
+function readinessItems(){
+  const mode = getActiveMode();
+  const el = (id) => document.getElementById(id);
+  const faltam = [];
+  if(!(el("cia").value || "").trim()) faltam.push("cia");
+  if(!(el("loc").value || "").trim()) faltam.push("LOC");
+  const store = getPaxStore();
+  let semNome = 0;
+  for(const t of ["ADT", "CHD", "INF"]){
+    const q = Math.max(0, toIntSafe(el(`paxq_${t.toLowerCase()}`).value));
+    for(let i = 0; i < q; i++){
+      const p = (store[t] || [])[i];
+      if(!p || !String(p.name || "").trim()) semNome++;
+    }
+  }
+  if(semNome) faltam.push(semNome === 1 ? "1 nome" : `${semNome} nomes`);
+  const items = [{ nome: "Passageiros", ok: faltam.length === 0, dica: faltam.length ? "Faltam: " + faltam.join(", ") : "" }];
+
+  const c = mode === "INTER" ? calcInter() : calcNac();
+  items.push({ nome: "Valores", ok: Math.abs(c.totalBRL) >= 0.005, dica: "Total em R$ 0,00: preencha os valores" });
+  if(mode === "INTER") items.push({ nome: "Câmbio", ok: c.fx > 0, dica: "Informe o câmbio" });
+  return items;
+}
+
+function updateReadiness(){
+  const box = document.getElementById("readiness");
+  if(!box) return;
+  let items;
+  try{ items = readinessItems(); }catch(e){ box.innerHTML = ""; return; }
+  box.innerHTML = items.map(i =>
+    `<span class="rdyChip ${i.ok ? "ok" : "warn"}"${i.dica ? ` title="${escapeHtml(i.dica)}"` : ""}>${i.ok ? "✔" : "⚠"} ${escapeHtml(i.nome)}${(!i.ok && i.dica) ? ` — ${escapeHtml(i.dica)}` : ""}</span>`
+  ).join("");
+}
+
+(function ligaFluxo(){
+  for(const [id, mode] of [["methodTabsNac", "NAC"], ["methodTabsInter", "INTER"]]){
+    const row = document.getElementById(id);
+    if(!row) continue;
+    row.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-method]");
+      if(b) setValuesMethod(mode, b.dataset.method);
+    });
+  }
+  // quantidades de passageiro mudam quais caixas de FXO aparecem
+  for(const id of ["paxq_adt", "paxq_chd", "paxq_inf"]){
+    const el = document.getElementById(id);
+    if(el) el.addEventListener("input", refreshValuesMethodUI);
+  }
+  // a conferencia acompanha qualquer digitacao (leve, com debounce)
+  let t = null;
+  const agenda = () => { clearTimeout(t); t = setTimeout(updateReadiness, 120); };
+  document.addEventListener("input", agenda);
+  document.addEventListener("change", agenda);
+  refreshValuesMethodUI();
+  updateReadiness();
+})();
 // ----- UI: "Ler print com o Copilot" (liga o JSON do Copilot aos campos; sem nenhuma chamada de rede) -----
 // Fluxo: Copiar prompt -> abrir o Copilot (janela nova, conta corporativa) -> anexar o print ->
 // copiar o JSON da resposta -> colar aqui: a previa (o que seria preenchido e o que fica em branco)
@@ -6447,11 +6509,8 @@ function copilotAplica(){
   const r = __copilotLeitura;
   if(!r || !r.ok) return;
   switchTab(r.tipo === "NAC" ? "tabNac" : "tabInter");
-  // No Internacional "Automatico" os campos de valor e a secao de dados ficam escondidos ate o
-  // "Concluir preenchimento": aplicar a leitura equivale a concluir, senao o atendente nao veria nada.
-  if(r.tipo === "INTER" && /autom/i.test(copilotValorTela("inter_tipo")) && typeof window.__interFinalizeAutoFlow === "function"){
-    window.__interFinalizeAutoFlow();
-  }
+  // A caixa do Copilot so aparece no metodo "Print com Copilot": se a leitura e do outro modo, ele passa a ser o ativo.
+  setValuesMethod(r.tipo === "NAC" ? "NAC" : "INTER", "print");
   for(const c of r.campos){
     const el = document.getElementById(c.id);
     if(!el) continue;
