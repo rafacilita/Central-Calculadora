@@ -1588,37 +1588,83 @@ function _compactNumberMaybe(s){
       if(!isFinite(n)) return null;
       return n;
     }
+// ─── Layout do e-mail da agencia ───────────────────────────────────────────────────────────────
+// Mesmo desenho do e-mail da Calculadora de Cotacao (faixa de marca, barras de secao, tabelas de largura
+// FIXA, notas discretas, rodape do codigo), com a paleta da Reemissao (roxo) para as duas se distinguirem.
+// Tudo que vai no e-mail e TABELA de largura fixa: o Outlook (motor do Word) ignora a largura de <div> e
+// esticaria os blocos ate a borda da janela. Para mudar a largura ou as cores, mude so aqui.
+const EMAIL_W = 760;
+const EMAIL_PAL = {
+  BRAND: "#3b2a6e",        // roxo profundo (a Cotacao usa azul-marinho #002554)
+  LINE: "#ddd6ec", SECTION: "#f5f2fb", INK: "#1f1a33", MUTED: "#5f5a78",
+  WARN_BG: "#fdf7ea", WARN_LINE: "#e3c37f", WARN_INK: "#8a5a06",
+  PILL_BG: "#ece6f8", PILL_LINE: "#cfc3ec",
+  SWIRL: ["#ed458f", "#8c4593", "#04a8db", "#f2a75e"]   // o lacinho da marca, igual nas duas calculadoras
+};
+const EMAIL_CELL = `border:1px solid ${EMAIL_PAL.LINE}; padding:8px 10px;`;
+
+function emailTable(rows){
+  return `<table role="presentation" width="${EMAIL_W}" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:${EMAIL_W}px; max-width:${EMAIL_W}px; mso-table-lspace:0pt; mso-table-rspace:0pt;">${rows}</table>`;
+}
+// Espaco vertical em linha de tabela (margin-top em tabela nao e confiavel no Outlook).
+function emailSpacerRow(px){
+  return `<tr><td style="height:${px}px; line-height:${px}px; font-size:1px; padding:0; border:0;">&nbsp;</td></tr>`;
+}
+function emailSectionBar(text){
+  const P = EMAIL_PAL;
+  return emailTable(emailSpacerRow(16)
+    + `<tr><td style="padding:8px 16px; background:${P.SECTION}; border:1px solid ${P.LINE}; border-left:3px solid ${P.BRAND}; font-weight:700; font-size:12px; letter-spacing:.03em; color:${P.INK}; text-transform:uppercase;">${text}</td></tr>`);
+}
+function emailNote(innerHtml, o){
+  const x = o || {};
+  return emailTable(emailSpacerRow(x.top != null ? x.top : 8)
+    + `<tr><td style="padding:0; border:0; font-size:${x.size || 12}px; color:${x.color || EMAIL_PAL.MUTED};">${innerHtml}</td></tr>`);
+}
+function emailHeader(title){
+  const P = EMAIL_PAL;
+  const swirl = P.SWIRL.map(c => `<td width="25%" style="width:25%; height:3px; line-height:3px; font-size:0; background-color:${c};">&nbsp;</td>`).join("");
+  return emailTable(
+    `<tr><td bgcolor="${P.BRAND}" style="background-color:${P.BRAND}; padding:14px 16px 12px 16px;">`
+    + `<div style="font-family:Arial, Helvetica, sans-serif; font-size:11px; font-weight:bold; color:#d8d0ee;">RexturAdvance</div>`
+    + `<div style="font-family:Arial, Helvetica, sans-serif; font-size:17px; font-weight:bold; color:#ffffff; padding-top:3px;">${title}</div>`
+    + `</td></tr>`
+    + `<tr><td style="padding:0; border:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; mso-table-lspace:0pt; mso-table-rspace:0pt;"><tr>${swirl}</tr></table></td></tr>`);
+}
+function emailAttentionRow(t){
+  const P = EMAIL_PAL;
+  return `<tr><td colspan="2" style="${EMAIL_CELL} background:${P.WARN_BG}; border-color:${P.WARN_LINE}; color:${P.WARN_INK}; text-align:center;"><b>${t.attention}</b><br/><span style="font-size:12px;">${t.valuesSubject}</span></td></tr>`;
+}
+function emailKvRow(label, valueHtml){
+  return `<tr><td style="${EMAIL_CELL} width:32%;"><b>${label}</b></td><td style="${EMAIL_CELL}">${valueHtml}</td></tr>`;
+}
+function emailTh(text, align){
+  const P = EMAIL_PAL;
+  return `<th style="${EMAIL_CELL} background:${P.SECTION}; color:${P.INK}; text-align:${align || "right"};">${text}</th>`;
+}
+function emailPill(text){
+  const P = EMAIL_PAL;
+  return `<span style="display:inline-block; margin-left:6px; padding:1px 8px; border-radius:999px; background:${P.PILL_BG}; border:1px solid ${P.PILL_LINE}; color:${P.INK}; font-size:12px; font-weight:700; line-height:18px;">${text}</span>`;
+}
+// Rodape com o codigo (CRR). Uma palavra so e longa e o Outlook nao a quebra: por isso vai em linhas curtas.
+// A leitura (loadCRRCode) ignora as quebras de linha. O "@#" (tag de Rentabilizacao do Outlook) continua visivel.
+const EMAIL_CODE_LINHA = 110;
+function emailCodeFooter(code, withTag){
+  const linhas = String(code || "").match(new RegExp(".{1," + EMAIL_CODE_LINHA + "}", "g")) || [String(code || "")];
+  return emailTable(`<tr><td style="padding:6px 0 0 0; border:0; font-size:8px; line-height:11px; color:#bbb;">${linhas.map(escapeHtml).join("<br>")}${withTag ? "<br/>@#" : ""}</td></tr>`);
+}
+
+// Bloco de texto livre (voos simulados, regras, calculo interno, bilhete original): barra de secao + caixa.
 function buildEmailSectionBlock(title, content, opts){
       const o = opts || {};
-      const strong = !!o.strong;
       const isHtml = !!o.html;
       const useMono = o.mono !== false;
       const value = String(content || "").trim();
       const emptyHtml = `<span style="color:#999">${escapeHtml(o.emptyLabel || "-")}</span>`;
       const bodyHtml = isHtml ? (value || emptyHtml) : (value ? brToHtml(value) : emptyHtml);
-      const headerBg = strong ? "#6d28d9" : "#efe8ff";
-      const headerColor = strong ? "#ffffff" : "#4c1d95";
-      const bodyBg = strong ? "#f7f3ff" : "#fbf9ff";
-      const border = strong ? "#d9c8f2" : "#e4daf8";
-      const marginTop = strong ? 22 : 18;
       const bodyFont = useMono ? 'Consolas, &quot;Courier New&quot;, monospace' : 'Arial, sans-serif';
-      const bodyFontSize = useMono ? '14px' : '13px';
-      const bodyLineHeight = useMono ? '1.55' : '1.5';
-      const extraBodyStyle = o.bodyStyle ? `; ${o.bodyStyle}` : '';
-      return `
-        <table border="0" cellspacing="0" cellpadding="0" width="760" style="width:760px; max-width:760px; margin:${marginTop}px 0 0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse;">
-          <tr>
-            <td style="padding:0;">
-              <div style="padding:10px 12px; background:${headerBg}; color:${headerColor}; font-weight:900; border-radius:12px; letter-spacing:.3px; border:${strong ? 'none' : '1px solid ' + border};">${escapeHtml(title)}</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:12px 0 0;">
-              <div style="padding:14px 14px; border:1px solid ${border}; border-radius:12px; background:${bodyBg}; font-family:${bodyFont}; font-size:${bodyFontSize}; line-height:${bodyLineHeight}${extraBodyStyle}">${bodyHtml}</div>
-            </td>
-          </tr>
-        </table>
-      `.trim();
+      const extraBodyStyle = o.bodyStyle ? ` ${o.bodyStyle}` : '';
+      return emailSectionBar(title)
+        + emailTable(`<tr><td style="${EMAIL_CELL} border-top:none; font-family:${bodyFont}; font-size:13px; line-height:1.5; color:${EMAIL_PAL.INK};${extraBodyStyle}">${bodyHtml}</td></tr>`);
     }
 function buildOpTitle(mode, c){
   const base = mode === "NAC" ? "OP (RF) — REEMISSÃO NAC" : "OP (RF) — REEMISSÃO INTER";
@@ -4378,7 +4424,8 @@ function getCRRCodeForEmail(){
     function loadCRRCode(code){
       // aceita CRR colado puro, dentro de texto maior (OBS RF / e-mail), com quebras de linha, etc.
       let full = String(code || "");
-      const compact = full.replace(/\s+/g,"");
+      // quebras de linha no meio do código e o ">" que alguns clientes de e-mail põem ao citar (resposta em texto simples)
+      const compact = full.replace(/\r?\n[ \t]*(?:>[ \t]*)*/g,"").replace(/\s+/g,"");
       const mm = compact.match(/(?:CRR4|CRR3|CRR2|CRR1|RA1)-[A-Za-z0-9\-_$\+]+/i);
       let c = mm ? mm[0] : compact.trim();
 
@@ -4566,14 +4613,14 @@ function buildEmailHtmlNac(){
       const common = getCommon();
       const calc = calcNac();
       const crr = getCRRCodeForEmail();
-      const crrEmailHtml = escapeHtml(crr) + (common.rentab ? "<br/>@#" : "");
+      const P = EMAIL_PAL;
       const fp = document.getElementById("nac_fp").value;
       const link = document.getElementById("nac_link").value.trim();
       const voos = document.getElementById("nac_voos").value.trim();
       const folioOn = !!(document.getElementById("nac_folio_on") && document.getElementById("nac_folio_on").checked);
       const folioAgencyOn = !!(document.getElementById("nac_folio_agencia") && document.getElementById("nac_folio_agencia").checked);
       const folio = (document.getElementById("nac_folio_text") ? document.getElementById("nac_folio_text").value.trim() : "");
-      const folioRow = (folioOn && folio && folioAgencyOn) ? `<tr><td style="background-color:#efe9f8; padding:6px 8px; border:1px solid #e6def3;"><b>${t.folio}</b></td><td style="background-color:#ffffff; padding:6px 8px; border:1px solid #e6def3;">${escapeHtml(folio)}</td></tr>` : "";
+      const folioRow = (folioOn && folio && folioAgencyOn) ? emailKvRow(t.folio, escapeHtml(folio)) : "";
 
       const regrasUserRaw = document.getElementById("nac_regras").value.trim();
       const isAzul = /(^|[\s,\/])(?:AD|AZUL)($|[\s,\/])/i.test(String(common.cia||"").trim());
@@ -4596,95 +4643,97 @@ function buildEmailHtmlNac(){
         return lines.join("\n").trim();
       })();
 
-const servicesRow = (calc.servicesBRL && calc.servicesBRL > 0)
+      const R = `${EMAIL_CELL} text-align:right;`;
+      const servicesRow = (calc.servicesBRL && calc.servicesBRL > 0)
         ? `
             <tr>
-              <td colspan="8" style="text-align:right"><b>${t.servicesAbat}</b></td>
-              <td style="text-align:right"><b>-${fmtBRL(calc.servicesBRL, isEN)}</b></td>
+              <td colspan="8" style="${R}"><b>${t.servicesAbat}</b></td>
+              <td style="${R}"><b>-${fmtBRL(calc.servicesBRL, isEN)}</b></td>
             </tr>
           `
         : "";
 
       const paxRows = calc.rows.map(r => `
         <tr>
-          <td><b>${r.t}</b> <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#EDE9FE;border:1px solid #C4B5FD;color:#111827;font-size:12px;font-weight:700;line-height:18px;">x${r.qty}</span></td>
-          <td style="text-align:right">${fmtBRL(r.oldFare, isEN)}</td>
-          <td style="text-align:right">${fmtBRL(r.newFare, isEN)}</td>
-          <td style="text-align:right">${fmtBRL(r.diffFare, isEN)}</td>
-          <td style="text-align:right">${fmtBRL(r.diffTax, isEN)}</td>
-          <td style="text-align:right">${fmtBRL(r.du, isEN)}</td>
-          <td style="text-align:right">${fmtBRL(r.pen, isEN)}</td>
-          <td style="text-align:right"><b>${fmtBRL(r.perPax, isEN)}</b></td>
-          <td style="text-align:right"><b>${fmtBRL(r.totalTipo, isEN)}</b></td>
+          <td style="${EMAIL_CELL}"><b>${r.t}</b> ${emailPill("x" + r.qty)}</td>
+          <td style="${R}">${fmtBRL(r.oldFare, isEN)}</td>
+          <td style="${R}">${fmtBRL(r.newFare, isEN)}</td>
+          <td style="${R}">${fmtBRL(r.diffFare, isEN)}</td>
+          <td style="${R}">${fmtBRL(r.diffTax, isEN)}</td>
+          <td style="${R}">${fmtBRL(r.du, isEN)}</td>
+          <td style="${R}">${fmtBRL(r.pen, isEN)}</td>
+          <td style="${R}"><b>${fmtBRL(r.perPax, isEN)}</b></td>
+          <td style="${R}"><b>${fmtBRL(r.totalTipo, isEN)}</b></td>
         </tr>
       `);
 
       const payLabel = t.payLabel;
       const linkHref = link ? ( /^https?:\/\//i.test(link) ? link : `https://${link}` ) : "";
-      const linkLine = `
-        <p style="margin:8px 0 0">${t.payMethod}: <b>${payLabel}</b></p>
-        ${link ? `<p style="margin:6px 0 0">${t.payLink} <b><a href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(link)}</a></b></p>` : ""}
-      `.trim();
 
       const azulRuleLi = isAzul ? `<li>${escapeHtml(t.azulRule)}</li>` : "";
       const latamGolRuleLi = (isLatamGol && !isAzul) ? `<li>${escapeHtml(t.latamGolRule)}</li>` : "";
       const regrasPadrao = `
-        <ul style="margin:8px 0 0; padding-left:18px">
+        <ul style="margin:0; padding-left:18px">
           ${azulRuleLi}
           ${latamGolRuleLi}
 <li>${t.noShowRule}</li>
         </ul>
       `;
-const regrasExtra = regrasUser ? `<p style="margin:8px 0 0"><b>${t.obs}</b><br/>${brToHtml(regrasUser)}</p>` : "";
+      const regrasExtra = regrasUser ? `<p style="margin:8px 0 0"><b>${t.obs}</b><br/>${brToHtml(regrasUser)}</p>` : "";
       const parcelamentoLabel = common.parcelamento === "Sim" ? t.yes : (common.parcelamento === "Não" ? t.no : common.parcelamento);
 
       return `
-        <div style="font-family:Arial, sans-serif; font-size:13px; color:#0b0f17">
+        <div style="font-family:Arial, sans-serif; font-size:13px; color:${P.INK}">
           <p>${t.intro}</p>
 
+          ${emailHeader(t.titleNac)}
+          ${emailTable(
+            emailAttentionRow(t)
+            + emailKvRow(t.cia, escapeHtml(ciaFullNameForAgency(common.cia)))
+            + emailKvRow(t.prazo, escapeHtml(t.prazoValue))
+            + emailKvRow(t.loc, escapeHtml(common.loc))
+            + (common.novo_loc ? emailKvRow(t.novoLoc, escapeHtml(common.novo_loc)) : "")
+            + emailKvRow(t.paxTicket, buildPaxTicketPairsHtml(common, isEN))
+            + (common.oac ? emailKvRow(t.oac, escapeHtml(common.oac)) : "")
+          )}
 
-          <table border="1" cellspacing="0" cellpadding="6" width="760" style="width:760px; max-width:760px; margin:0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse; border:1px solid #c7ced9">
-            <tr><td colspan="2" style="background-color:#d9cce3; font-weight:bold; text-align:center; padding:8px; font-size:14px;">${t.titleNac}</td></tr>
-            <tr><td colspan="2" style="text-align:center; padding:8px;"><b>${t.attention}</b><br/>${t.valuesSubject}</td></tr>
-            <tr><td style="width:32%"><b>${t.cia}</b></td><td>${escapeHtml(ciaFullNameForAgency(common.cia))}</td></tr>
-            <tr><td><b>${t.prazo}</b></td><td>${escapeHtml(t.prazoValue)}</td></tr>
-            <tr><td><b>${t.loc}</b></td><td>${escapeHtml(common.loc)}</td></tr>
-            ${common.novo_loc ? `<tr><td><b>${t.novoLoc}</b></td><td>${escapeHtml(common.novo_loc)}</td></tr>` : ""}
-            <tr><td><b>${t.paxTicket}</b></td><td>${buildPaxTicketPairsHtml(common, isEN)}</td></tr>${common.oac ? `<tr><td><b>${t.oac}</b></td><td>${escapeHtml(common.oac)}</td></tr>` : ``}
-            <tr><td><b>${t.familia}</b></td><td>${escapeHtml(common.familia)}</td></tr>
-            <tr><td><b>${t.bag}</b></td><td>${escapeHtml(common.bag)}</td></tr>
-<tr><td><b>${t.parcelamento}</b></td><td>${escapeHtml(parcelamentoLabel)}</td></tr>
-          ${folioRow}
-          </table>
+          ${emailSectionBar(t.secCondicoes)}
+          ${emailTable(
+            emailKvRow(t.familia, escapeHtml(common.familia))
+            + emailKvRow(t.bag, escapeHtml(common.bag))
+            + emailKvRow(t.parcelamento, escapeHtml(parcelamentoLabel))
+            + folioRow
+          )}
 
-          <p style="margin:12px 0 6px"><b>${t.descritivo}</b></p>
-          <table border="1" cellspacing="0" cellpadding="6" width="760" style="width:760px; max-width:760px; margin:0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse; border:1px solid #c7ced9">
+          ${emailSectionBar(t.descritivo)}
+          ${emailTable(`
             <tr>
-              <th style="background-color:#a99ac5; color:white; text-align:left">${t.colType}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colOldFare}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colNewFare}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colDiffFare}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colDiffTax}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colDU}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colPen}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colPerPax}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colTotalTipo}</th>
+              ${emailTh(t.colType, "left")}
+              ${emailTh(t.colOldFare)}
+              ${emailTh(t.colNewFare)}
+              ${emailTh(t.colDiffFare)}
+              ${emailTh(t.colDiffTax)}
+              ${emailTh(t.colDU)}
+              ${emailTh(t.colPen)}
+              ${emailTh(t.colPerPax)}
+              ${emailTh(t.colTotalTipo)}
             </tr>
-            ${paxRows.join("") || `<tr><td colspan="9">${t.noValues}</td></tr>`}
+            ${paxRows.join("") || `<tr><td colspan="9" style="${EMAIL_CELL}">${t.noValues}</td></tr>`}
             ${servicesRow}
             <tr>
-              <td colspan="8" style="text-align:right; background-color:#d9cce3"><b>${t.totalToPay}</b></td>
-              <td style="text-align:right; background-color:#d9cce3"><b>${fmtBRL(calc.totalBRL, isEN)}</b></td>
+              <td colspan="8" style="${R} background:${P.SECTION};"><b>${t.totalToPay}</b></td>
+              <td style="${R} background:${P.SECTION};"><b>${fmtBRL(calc.totalBRL, isEN)}</b></td>
             </tr>
-          </table>
+          `)}
 
-          ${linkLine}
-          <p style="margin:6px 0 0"><i>${t.replyNote}</i></p>
-          <p style="margin:6px 0 0">${t.lgpd}</p>
+          ${emailNote(`${t.payMethod}: <b>${payLabel}</b>`, { top: 10, size: 13, color: P.INK })}
+          ${link ? emailNote(`${t.payLink} <b><a href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(link)}</a></b>`, { top: 6, size: 13, color: P.INK }) : ""}
+          ${emailNote(`<i>${t.replyNote}</i>`, { top: 8 })}
+          ${emailNote(t.lgpd, { top: 4 })}
 
           ${buildEmailSectionBlock(t.voosSimulados, voos, { strong:true })}
-          ${buildEmailSectionBlock(t.regras, `${regrasPadrao}${regrasExtra}`, { html:true, mono:false, bodyStyle:'padding:14px 16px;' })}
-          <p style="margin:6px 0 0; font-size:8px; color:#bbb">${crrEmailHtml}</p>
+          ${buildEmailSectionBlock(t.regras, `${regrasPadrao}${regrasExtra}`, { html:true, mono:false, bodyStyle:'padding:12px 16px;' })}
+          ${emailCodeFooter(crr, common.rentab)}
         </div>
       `.trim();
     }
@@ -4694,7 +4743,7 @@ function buildEmailHtmlInter(){
       const common = getCommon();
       const calc = calcInter();
       const crr = getCRRCodeForEmail();
-      const crrEmailHtml = escapeHtml(crr) + (common.rentab ? "<br/>@#" : "");
+      const P = EMAIL_PAL;
       const incentivo = document.getElementById("inter_incentivo").value;
       const tipo = document.getElementById("inter_tipo").value;
       const fp = document.getElementById("inter_fp").value;
@@ -4707,101 +4756,101 @@ function buildEmailHtmlInter(){
       const endossoOn = !!(document.getElementById("inter_endosso_on") && document.getElementById("inter_endosso_on").checked);
       const endossoAgencyOn = !!(document.getElementById("inter_endosso_agencia") && document.getElementById("inter_endosso_agencia").checked);
       const endosso = (document.getElementById("inter_endosso_text") ? document.getElementById("inter_endosso_text").value.trim() : "");
-      const endossoRow = (endossoOn && endosso && endossoAgencyOn) ? `<tr><td style="background-color:#efe9f8; padding:6px 8px; border:1px solid #e6def3;"><b>${t.endosso}</b></td><td style="background-color:#ffffff; padding:6px 8px; border:1px solid #e6def3;">${escapeHtml(endosso)}</td></tr>` : "";
+      const endossoRow = (endossoOn && endosso && endossoAgencyOn) ? emailKvRow(t.endosso, escapeHtml(endosso)) : "";
 
       const isAzul = /(^|[\s,\/])(?:AD|AZUL)($|[\s,\/])/i.test(String(common.cia||"").trim());
-      const azulMsg = "";
 
+      const R = `${EMAIL_CELL} text-align:right;`;
       const paxRows = calc.rows.map(r => `
         <tr>
-          <td><b>${r.t}</b> <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#EDE9FE;border:1px solid #C4B5FD;color:#111827;font-size:12px;font-weight:700;line-height:18px;">x${r.qty}</span></td>
-          <td style="text-align:right">${fmtCur(r.fare)}</td>
-          <td style="text-align:right">${fmtCur(r.tax)}</td>
-          <td style="text-align:right">${fmtCur(r.du)}</td>
-          <td style="text-align:right">${fmtCur(r.pen)}</td>
-          <td style="text-align:right">${fmtUSD(r.feeUSD)}</td>
-          <td style="text-align:right"><b>${fmtCur(r.perPax)}</b></td>
-          <td style="text-align:right"><b>${fmtCur(r.totalTipo)}</b></td>
+          <td style="${EMAIL_CELL}"><b>${r.t}</b> ${emailPill("x" + r.qty)}</td>
+          <td style="${R}">${fmtCur(r.fare)}</td>
+          <td style="${R}">${fmtCur(r.tax)}</td>
+          <td style="${R}">${fmtCur(r.du)}</td>
+          <td style="${R}">${fmtCur(r.pen)}</td>
+          <td style="${R}">${fmtUSD(r.feeUSD)}</td>
+          <td style="${R}"><b>${fmtCur(r.perPax)}</b></td>
+          <td style="${R}"><b>${fmtCur(r.totalTipo)}</b></td>
         </tr>
       `);
 
       const payLabel = t.payLabel;
       const linkHref = link ? ( /^https?:\/\//i.test(link) ? link : `https://${link}` ) : "";
-      const linkLine = `
-        <p style="margin:8px 0 0">${t.payMethod}: <b>${payLabel}</b></p>
-        ${link ? `<p style="margin:6px 0 0">${t.payLink} <b><a href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(link)}</a></b></p>` : ""}
-      `.trim();
 
       // Multa que veio em BRL: linha propria na tabela (sem conversao) e o total em BRL a inclui.
       const penBrlDetail = calc.rows.filter(r => r.penBRL > 0).map(r => `${r.t} ${r.qty} × ${fmtBRL(r.penBRL, isEN)}`).join("; ");
       const penBrlRow = calc.penBRLTotal > 0
         ? `
             <tr>
-              <td colspan="7" style="text-align:right; background-color:#d9cce3"><b>${t.penBrl}</b> <span style="font-weight:400; color:#475569">(${escapeHtml(penBrlDetail)})</span></td>
-              <td style="text-align:right; background-color:#d9cce3"><b>${fmtBRL(calc.penBRLTotal, isEN)}</b></td>
+              <td colspan="7" style="${R} background:${P.SECTION};"><b>${t.penBrl}</b> <span style="font-weight:400; color:${P.MUTED}">(${escapeHtml(penBrlDetail)})</span></td>
+              <td style="${R} background:${P.SECTION};"><b>${fmtBRL(calc.penBRLTotal, isEN)}</b></td>
             </tr>`
         : "";
       const incMulta = calc.penBRLTotal > 0 ? ` ${t.incMultaBrl}` : "";
 
       const fxLine = (calc.fx > 0 || (calc.totalCur === 0 && calc.penBRLTotal > 0))
-        ? `<p style="margin:6px 0 0">${calc.fx > 0 ? `<b>${t.fxInformado}</b> 1 ${escapeHtml(calc.cur)} = ${calc.fx.toFixed(4).replace(".", isEN ? "." : ",")} BRL • ` : ""}<b>${t.totalBrl}</b> ${fmtBRL(calc.totalBRL, isEN)}${incMulta}</p>`
-        : `<p style="margin:6px 0 0; color:#6b4b00"><b>${isEN ? "Attention:" : "Atenção:"}</b> ${t.fxMissing.replace(/^Atenção: |^Attention: /, "")}</p>`;
+        ? emailNote(`${calc.fx > 0 ? `<b>${t.fxInformado}</b> 1 ${escapeHtml(calc.cur)} = ${calc.fx.toFixed(4).replace(".", isEN ? "." : ",")} BRL • ` : ""}<b>${t.totalBrl}</b> ${fmtBRL(calc.totalBRL, isEN)}${incMulta}`, { top: 10, size: 13, color: P.INK })
+        : emailNote(`<b>${isEN ? "Attention:" : "Atenção:"}</b> ${t.fxMissing.replace(/^Atenção: |^Attention: /, "")}`, { top: 10, size: 13, color: P.WARN_INK });
 
       const incentivoLabel = incentivo === "Sim" ? t.yes : (incentivo === "Não" ? t.no : incentivo);
       const parcelamentoLabel = common.parcelamento === "Sim" ? t.yes : (common.parcelamento === "Não" ? t.no : common.parcelamento);
       const tipoLabel = t.tipoValue[tipo] || tipo;
 
       return `
-        <div style="font-family:Arial, sans-serif; font-size:13px; color:#0b0f17">
+        <div style="font-family:Arial, sans-serif; font-size:13px; color:${P.INK}">
           <p>${t.intro}</p>
-          ${azulMsg}
 
-          <table border="1" cellspacing="0" cellpadding="6" width="760" style="width:760px; max-width:760px; margin:0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse; border:1px solid #c7ced9">
-            <tr><td colspan="2" style="background-color:#d9cce3; font-weight:bold; text-align:center; padding:8px; font-size:14px;">${t.titleInter}</td></tr>
-            <tr><td colspan="2" style="text-align:center; padding:8px;"><b>${t.attention}</b><br/>${t.valuesSubject}</td></tr>
-            <tr><td style="width:32%"><b>${t.cia}</b></td><td>${escapeHtml(ciaFullNameForAgency(common.cia))}</td></tr>
-            <tr><td><b>${t.prazo}</b></td><td>${escapeHtml(t.prazoValue)}</td></tr>
-            <tr><td><b>${t.locCalc}</b></td><td>${escapeHtml(common.loc)}</td></tr>
-            ${common.novo_loc ? `<tr><td><b>${t.novoLoc}</b></td><td>${escapeHtml(common.novo_loc)}</td></tr>` : ""}
-            <tr><td><b>${t.paxTicket}</b></td><td>${buildPaxTicketPairsHtml(common, isEN)}</td></tr>
-            <tr><td><b>${t.familia}</b></td><td>${escapeHtml(common.familia)}</td></tr>
-            <tr><td><b>${t.bag}</b></td><td>${escapeHtml(common.bag)}</td></tr>
-            <tr><td><b>${t.parcelamento}</b></td><td>${escapeHtml(parcelamentoLabel)}</td></tr>
-            <tr><td><b>${t.moeda}</b></td><td>${escapeHtml(calc.cur)}</td></tr>
-            <tr><td><b>${t.incentivo}</b></td><td>${escapeHtml(incentivoLabel)}</td></tr>
-          ${endossoRow}
-          </table>
+          ${emailHeader(t.titleInter)}
+          ${emailTable(
+            emailAttentionRow(t)
+            + emailKvRow(t.cia, escapeHtml(ciaFullNameForAgency(common.cia)))
+            + emailKvRow(t.prazo, escapeHtml(t.prazoValue))
+            + emailKvRow(t.locCalc, escapeHtml(common.loc))
+            + (common.novo_loc ? emailKvRow(t.novoLoc, escapeHtml(common.novo_loc)) : "")
+            + emailKvRow(t.paxTicket, buildPaxTicketPairsHtml(common, isEN))
+          )}
 
-          <p style="margin:12px 0 6px"><b>${t.descritivo} — ${escapeHtml(calc.cur)} <span style="font-weight:700; color:#475569">${t.rcUsdNote}</span></b></p>
-          <table border="1" cellspacing="0" cellpadding="6" width="760" style="width:760px; max-width:760px; margin:0; mso-table-lspace:0pt; mso-table-rspace:0pt; border-collapse:collapse; border:1px solid #c7ced9">
+          ${emailSectionBar(t.secCondicoes)}
+          ${emailTable(
+            emailKvRow(t.familia, escapeHtml(common.familia))
+            + emailKvRow(t.bag, escapeHtml(common.bag))
+            + emailKvRow(t.parcelamento, escapeHtml(parcelamentoLabel))
+            + emailKvRow(t.moeda, escapeHtml(calc.cur))
+            + emailKvRow(t.incentivo, escapeHtml(incentivoLabel))
+            + endossoRow
+          )}
+
+          ${emailSectionBar(`${t.descritivo} — ${escapeHtml(calc.cur)} <span style="font-weight:700; color:${P.MUTED}; text-transform:none;">${t.rcUsdNote}</span>`)}
+          ${emailTable(`
             <tr>
-              <th style="background-color:#a99ac5; color:white; text-align:left">${t.colType}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colDiffFare}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colDiffTax}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colDU}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colPen}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colFeeUsd}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colPerPax}</th>
-              <th class="right" style="background-color:#a99ac5; color:white; text-align:right">${t.colTotalTipo}</th>
+              ${emailTh(t.colType, "left")}
+              ${emailTh(t.colDiffFare)}
+              ${emailTh(t.colDiffTax)}
+              ${emailTh(t.colDU)}
+              ${emailTh(t.colPen)}
+              ${emailTh(t.colFeeUsd)}
+              ${emailTh(t.colPerPax)}
+              ${emailTh(t.colTotalTipo)}
             </tr>
-            ${paxRows.join("") || `<tr><td colspan="8">${t.noValues}</td></tr>`}
+            ${paxRows.join("") || `<tr><td colspan="8" style="${EMAIL_CELL}">${t.noValues}</td></tr>`}
             <tr>
-              <td colspan="7" style="text-align:right; background-color:#d9cce3"><b>${t.totalCur(escapeHtml(calc.cur))}</b></td>
-              <td style="text-align:right; background-color:#d9cce3"><b>${fmtCur(calc.totalCur)}</b></td>
+              <td colspan="7" style="${R} background:${P.SECTION};"><b>${t.totalCur(escapeHtml(calc.cur))}</b></td>
+              <td style="${R} background:${P.SECTION};"><b>${fmtCur(calc.totalCur)}</b></td>
             </tr>${penBrlRow}
-          </table>
+          `)}
 
           ${fxLine}
-          <p style="margin:6px 0 0"><b>${t.tipoCalc}</b> ${escapeHtml(tipoLabel)}</p>
+          ${emailNote(`<b>${t.tipoCalc}</b> ${escapeHtml(tipoLabel)}`, { top: 6, size: 13, color: P.INK })}
 
-          ${linkLine}
-          <p style="margin:6px 0 0"><i>${t.replyNote}</i></p>
-          <p style="margin:6px 0 0">${t.lgpd}</p>
+          ${emailNote(`${t.payMethod}: <b>${payLabel}</b>`, { top: 10, size: 13, color: P.INK })}
+          ${link ? emailNote(`${t.payLink} <b><a href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(link)}</a></b>`, { top: 6, size: 13, color: P.INK }) : ""}
+          ${emailNote(`<i>${t.replyNote}</i>`, { top: 8 })}
+          ${emailNote(t.lgpd, { top: 4 })}
 
           ${buildEmailSectionBlock(t.voosSimulados, voos, { strong:true })}
           ${buildEmailSectionBlock(isEN ? "CALCULATION - INTERNAL USE" : "CÁLCULO - USO INTERNO", interno)}
           ${buildEmailSectionBlock(isEN ? "ORIGINAL TICKET" : "BILHETE ORIGINAL", original)}
-          <p style="margin:6px 0 0; font-size:8px; color:#bbb">${crrEmailHtml}</p>
+          ${emailCodeFooter(crr, common.rentab)}
         </div>
       `.trim();
     }
@@ -5554,6 +5603,7 @@ let __lastCiaForAzul = "";
         intro: "Segue abaixo cálculo de reemissão conforme solicitado.",
         titleNac: "CÁLCULO DE REEMISSÃO NACIONAL",
         titleInter: "CÁLCULO DE REEMISSÃO INTERNACIONAL",
+        secCondicoes: "CONDIÇÕES",
         attention: "ATENÇÃO: CONFIRA TODOS OS DADOS ANTES DE APROVAR A REEMISSÃO.",
         valuesSubject: "VALORES SUJEITOS A ALTERAÇÃO",
         cia: "Cia Aérea", prazo: "Prazo", prazoValue: "Imediato",
@@ -5589,6 +5639,7 @@ let __lastCiaForAzul = "";
         intro: "Please find below the reissue calculation as requested.",
         titleNac: "DOMESTIC REISSUE CALCULATION",
         titleInter: "INTERNATIONAL REISSUE CALCULATION",
+        secCondicoes: "CONDITIONS",
         attention: "ATTENTION: PLEASE CHECK ALL DATA BEFORE APPROVING THE REISSUE.",
         valuesSubject: "VALUES SUBJECT TO CHANGE",
         cia: "Airline", prazo: "Deadline", prazoValue: "Immediate",
