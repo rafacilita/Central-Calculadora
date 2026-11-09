@@ -1254,7 +1254,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 
           <div id="copilotAnchorInter">
         <div class="note hidden" id="copilotBox" style="margin-top:6px">
-          <div style="font-weight:800">Print com Copilot <span class="muted small">(E-Latam / E-Gol / NDC • opcional)</span></div>
+          <div id="copilotTitulo" style="font-weight:800">Print com Copilot <span class="muted small">(E-Latam / E-Gol / NDC • opcional)</span></div>
           <div id="ocrBox" class="hidden" style="margin-top:8px; padding:10px; border:1px dashed rgba(127,127,127,.5); border-radius:10px">
             <div style="font-weight:800">Ler o print aqui <span class="muted small">(OCR no seu navegador • sem Copilot)</span></div>
             <div class="muted small" style="margin-top:4px">E-Latam / E-Gol, NDC Farelogix e Amadeus, Sabre “Sumário da Comparação” e o texto do FXO. A imagem é lida no seu computador e <b>não sai dele</b>.</div>
@@ -1266,20 +1266,24 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
             <img id="ocrThumb" alt="Print lido" class="hidden" style="margin-top:6px; max-width:260px; max-height:160px; border:1px solid rgba(127,127,127,.4); border-radius:6px">
             <div class="muted small" style="margin-top:6px">Confira os valores da prévia abaixo com o print antes de aplicar. Na dúvida, o campo fica em branco.</div>
           </div>
-          <div class="muted small" style="margin-top:6px">
-            Abra o <b>Leitor de Reemissão</b> (agente do Copilot), anexe o print e cole a resposta (JSON) aqui embaixo.
-            Sem acesso ao agente? Use <b>Copiar prompt</b> e cole em qualquer chat do Copilot.
-            O print vai só para o Copilot corporativo; a calculadora não envia nada para fora.
-          </div>
-          <div class="row" style="margin-top:8px">
-            <button class="action primary" id="btnCopilotAbrir" type="button">Abrir Leitor de Reemissão ↗</button>
-            <button class="action" id="btnCopilotPrompt" type="button">Copiar prompt</button>
-            <div>
-              <label>Aplicar na linha de</label>
-              <select id="copilot_pax"><option value="ADT">ADT</option><option value="CHD">CHD</option><option value="INF">INF</option></select>
+          <div id="copilotPaxSlot"></div>
+          <details id="copilotAlt" open>
+            <summary id="copilotAltResumo">Prefiro usar o Copilot (alternativa ao OCR)</summary>
+            <div class="muted small" style="margin-top:6px">
+              Abra o <b>Leitor de Reemissão</b> (agente do Copilot), anexe o print e cole a resposta (JSON) aqui embaixo.
+              Sem acesso ao agente? Use <b>Copiar prompt</b> e cole em qualquer chat do Copilot.
+              O print vai só para o Copilot corporativo; a calculadora não envia nada para fora.
             </div>
-          </div>
-          <textarea id="copilot_json" rows="5" placeholder="Cole aqui a resposta (JSON) do Copilot" style="margin-top:8px"></textarea>
+            <div class="row" style="margin-top:8px">
+              <button class="action primary" id="btnCopilotAbrir" type="button">Abrir Leitor de Reemissão ↗</button>
+              <button class="action" id="btnCopilotPrompt" type="button">Copiar prompt</button>
+              <div id="copilotPaxWrap">
+                <label>Aplicar na linha de</label>
+                <select id="copilot_pax"><option value="ADT">ADT</option><option value="CHD">CHD</option><option value="INF">INF</option></select>
+              </div>
+            </div>
+            <textarea id="copilot_json" rows="5" placeholder="Cole aqui a resposta (JSON) do Copilot" style="margin-top:8px"></textarea>
+          </details>
           <div id="copilot_result"></div>
         </div>
           </div>
@@ -7573,8 +7577,23 @@ async function ocrLerArquivo(blob){
 
 (function ligaOcr(){
   const box = document.getElementById("ocrBox");
-  if(!box || !ocrBase()) return;                                       // sem RA_OCR_BASE: bloco oculto, nada e carregado
+  const alt = document.getElementById("copilotAlt");
+  if(!box || !ocrBase()){
+    // sem RA_OCR_BASE (ex.: widget do Elementor): o Copilot e o UNICO caminho. A secao fica aberta e sem o titulo
+    // recolhivel, com a aparencia de sempre; o bloco do OCR fica oculto e nada e carregado.
+    if(alt){ alt.open = true; const s = document.getElementById("copilotAltResumo"); if(s) s.style.display = "none"; }
+    return;
+  }
   box.classList.remove("hidden");
+  // OCR ligado: "Ler print" (colar/escolher a imagem) e a opcao principal; o Copilot vira uma alternativa recolhida
+  const tit = document.getElementById("copilotTitulo"); if(tit) tit.style.display = "none";
+  document.querySelectorAll('.methodTabs [data-method="print"]').forEach(b => { b.textContent = "Ler print"; });
+  const slot = document.getElementById("copilotPaxSlot"), wrap = document.getElementById("copilotPaxWrap");
+  if(slot && wrap){ slot.style.marginTop = "8px"; slot.appendChild(wrap); }      // o seletor ADT/CHD/INF serve ao OCR tambem
+  if(alt){
+    alt.open = false; alt.style.marginTop = "10px";
+    const s = document.getElementById("copilotAltResumo"); if(s){ s.style.cursor = "pointer"; s.style.fontSize = "13px"; }
+  }
   const drop = document.getElementById("ocrDrop"), file = document.getElementById("ocrFile");
   drop.addEventListener("click", ()=> file.click());
   drop.addEventListener("keydown", (e)=>{ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); file.click(); } });
