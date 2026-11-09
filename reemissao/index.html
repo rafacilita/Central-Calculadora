@@ -722,6 +722,7 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
 <link rel="stylesheet" href="../shared/nav.css" /><!-- consolidacao:inject -->
 <link rel="stylesheet" href="../shared/reemissao-tema.css" /><!-- consolidacao:inject -->
 <script src="../shared/tema-seed.js"></script><!-- consolidacao:inject -->
+<script>window.RA_OCR_BASE = "../shared/ocr/";</script><!-- consolidacao:inject -->
 </head>
 <body>
   <header>
@@ -1254,6 +1255,17 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
           <div id="copilotAnchorInter">
         <div class="note hidden" id="copilotBox" style="margin-top:6px">
           <div style="font-weight:800">Print com Copilot <span class="muted small">(E-Latam / E-Gol / NDC • opcional)</span></div>
+          <div id="ocrBox" class="hidden" style="margin-top:8px; padding:10px; border:1px dashed rgba(127,127,127,.5); border-radius:10px">
+            <div style="font-weight:800">Ler o print aqui <span class="muted small">(OCR no seu navegador • sem Copilot)</span></div>
+            <div class="muted small" style="margin-top:4px">E-Latam / E-Gol, NDC Farelogix e Amadeus, Sabre “Sumário da Comparação” e o texto do FXO. A imagem é lida no seu computador e <b>não sai dele</b>.</div>
+            <div id="ocrDrop" tabindex="0" role="button" aria-label="Colar, arrastar ou escolher o print" style="margin-top:8px; padding:14px; text-align:center; border:2px dashed rgba(127,127,127,.55); border-radius:10px; cursor:pointer">
+              Cole o print aqui (<b>Ctrl+V</b>), arraste o arquivo ou clique para escolher
+            </div>
+            <input type="file" id="ocrFile" accept="image/*" class="hidden">
+            <div id="ocrStatus" class="muted small" role="status" aria-live="polite" style="margin-top:6px"></div>
+            <img id="ocrThumb" alt="Print lido" class="hidden" style="margin-top:6px; max-width:260px; max-height:160px; border:1px solid rgba(127,127,127,.4); border-radius:6px">
+            <div class="muted small" style="margin-top:6px">Confira os valores da prévia abaixo com o print antes de aplicar. Na dúvida, o campo fica em branco.</div>
+          </div>
           <div class="muted small" style="margin-top:6px">
             Abra o <b>Leitor de Reemissão</b> (agente do Copilot), anexe o print e cole a resposta (JSON) aqui embaixo.
             Sem acesso ao agente? Use <b>Copiar prompt</b> e cole em qualquer chat do Copilot.
@@ -2601,7 +2613,7 @@ function parseTickets(text){
       }
 // GERADO por ferramentas/gera_prompt_copilot.cjs a partir de ia-agente/prompt_leitor_reemissao.md.
 // Nao edite aqui: edite o .md e gere de novo.
-const COPILOT_PROMPT = "Você vai ler o print de tela anexado, de um sistema de reemissão de bilhete aéreo, e devolver SOMENTE um JSON, sem texto antes ou depois.\n\nREGRAS GERAIS\n- Copie só o que está visível na imagem. Não calcule, não estime, não corrija e não complete nada.\n- Se um campo não estiver visível ou legível, use null. Nunca invente nem \"chute\" um valor.\n- Números: ponto como separador decimal, sem separador de milhar e sem símbolo de moeda. Exemplo: 1.234,56 na tela vira 1234.56.\n- Moedas: código de 3 letras (BRL, USD, EUR).\n- Não transcreva nome de passageiro, número de bilhete nem localizador.\n- Se a imagem estiver borrada, cortada ou não for uma tela de cálculo de reemissão, devolva \"sistema\": \"desconhecido\" e todos os outros campos null, e explique em \"observacoes\".\n\nIDENTIFIQUE O SISTEMA e leia conforme o caso:\n\n1) E-Latam / E-Gol (colunas \"Trocar\", \"Nova Quantia\", \"Moeda de Reemissão\")\n- tarifa_antiga = linha BASE, coluna \"Trocar\"\n- tarifa_nova = linha BASE, coluna \"Nova Quantia\"\n- dif_tarifa = linha BASE, coluna \"Moeda de Reemissão\"\n- dif_taxas = linha \"Taxas\", coluna \"Moeda de Reemissão\"\n- multa = campo \"Taxa por Mudança\" (isto é a multa, apesar do rótulo). Se estiver escrito \"N/A\", use 0.\n- total_a_cobrar = o \"Total\" FINAL, isolado, que aparece ABAIXO dos campos de multa/imposto/taxa de serviço. NÃO use a linha \"Total:\" intermediária (subtotal de BASE + Taxas). Se esse total final não estiver visível, use null.\n- Se houver linhas BASE USD e EQV, o cálculo é INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"USD\".\n  - eqv_antiga = linha EQV, coluna \"Trocar\"\n  - eqv_nova = linha EQV, coluna \"Nova Quantia\"\n  - dif_tarifa_brl = linha EQV, coluna \"Moeda de Reemissão\" (diferença em BRL)\n  - A multa já vem em BRL: multa_moeda = \"BRL\" e NÃO converta.\n- Se não houver BASE USD, tipo = \"NAC\", moeda_emissao = \"BRL\" e tudo está em BRL (multa_moeda = \"BRL\").\n- total_moeda só pode ter valor se total_a_cobrar tiver número; caso contrário, null.\n\n2) NDC Farelogix (\"Bilhete Antigo\", \"Bilhete Novo\", \"Cálculo da troca\")\n- NDC é sempre INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"USD\".\n- tarifa_antiga = \"Passagem original na tarifa-base\"\n- tarifa_nova = \"Tarifa-base nova\"\n- dif_tarifa = \"Diferença da tarifa-base\" (em USD)\n- cambio = \"Taxa de conversão de moeda\" (está explícito na tela)\n- dif_tarifa_brl = \"Diferença na moeda de venda\"\n- dif_taxas = \"Impostos de coleta de acréscimo\"\n- multa = campo \"Multa\"\n- penalidades_fiscais = \"Penalidades fiscais a pagar\"\n- total_a_cobrar = linha final (\"Total Forfeit\" ou \"Coleta de acréscimo\")\n- \"Impostos residuais\" são só informativos: coloque em observacoes, não em outro campo.\n\n3) NDC Amadeus (tudo em BRL)\n- NDC é sempre INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"BRL\", multa_moeda = \"BRL\".\n- dif_tarifa = \"Diferença de preço\" (leia o valor direto da tela, NÃO recalcule)\n- multa = \"Multas\"\n- tarifa_antiga e tarifa_nova = coluna Tarifa da tabela, antigo → novo\n\nFORMATO DA RESPOSTA (use exatamente estas chaves)\n```json\n{\n  \"sistema\": \"e-latam | e-gol | ndc-farelogix | ndc-amadeus | desconhecido\",\n  \"tipo\": \"NAC | INTER | null\",\n  \"moeda_emissao\": \"BRL | USD | EUR | null\",\n  \"tarifa_antiga\": null,\n  \"tarifa_nova\": null,\n  \"dif_tarifa\": null,\n  \"eqv_antiga\": null,\n  \"eqv_nova\": null,\n  \"dif_tarifa_brl\": null,\n  \"dif_taxas\": null,\n  \"multa\": null,\n  \"multa_moeda\": null,\n  \"penalidades_fiscais\": null,\n  \"cambio\": null,\n  \"total_a_cobrar\": null,\n  \"total_moeda\": null,\n  \"campos_nao_lidos\": [\"nomes dos campos que ficaram null por não estarem visíveis\"],\n  \"observacoes\": \"dúvidas, leituras incertas ou algo que não bateu; vazio se nada\"\n}\n```\nEm caso de dúvida sobre qualquer valor, deixe null e cite o campo em \"campos_nao_lidos\".";
+const COPILOT_PROMPT = "Você vai ler o print de tela anexado, de um sistema de reemissão de bilhete aéreo, e devolver SOMENTE um JSON, sem texto antes ou depois.\n\nREGRAS GERAIS\n- Copie só o que está visível na imagem. Não calcule, não estime, não corrija e não complete nada.\n- Se um campo não estiver visível ou legível, use null. Nunca invente nem \"chute\" um valor.\n- Números: ponto como separador decimal, sem separador de milhar e sem símbolo de moeda. Exemplo: 1.234,56 na tela vira 1234.56.\n- Se um valor vier com letras ou código colado antes do número (exemplo: \"PD430.46\"), leia só o número (430.46) e ignore as letras.\n- Moedas: código de 3 letras (BRL, USD, EUR).\n- Não transcreva nome de passageiro, número de bilhete nem localizador.\n- Se a imagem estiver borrada, cortada ou não for uma tela de cálculo de reemissão, devolva \"sistema\": \"desconhecido\" e todos os outros campos null, e explique em \"observacoes\".\n- Depois de ler, FAÇA A CONFERÊNCIA: tarifa_nova − tarifa_antiga deve dar dif_tarifa; taxas_nova − taxas_antiga deve dar dif_taxas; e dif_tarifa (ou dif_tarifa_brl, no internacional) + dif_taxas + multa (+ penalidades_fiscais + outros_valores) deve dar total_a_cobrar. Se alguma conta não fechar, releia a imagem com calma. Se continuar sem fechar, devolva o que está escrito na tela mesmo assim e explique a divergência em \"observacoes\". NUNCA mude um número para a conta fechar.\n\nIDENTIFIQUE O SISTEMA e leia conforme o caso:\n\n1) E-Latam / E-Gol (colunas \"Trocar\", \"Nova Quantia\", \"Moeda de Reemissão\")\n- tarifa_antiga = linha BASE, coluna \"Trocar\"\n- tarifa_nova = linha BASE, coluna \"Nova Quantia\"\n- dif_tarifa = linha BASE, coluna \"Moeda de Reemissão\"\n- taxas_antiga = linha \"Taxas\", coluna \"Trocar\" (ignore as letras antes do número)\n- taxas_nova = linha \"Taxas\", coluna \"Nova Quantia\"\n- dif_taxas = linha \"Taxas\", coluna \"Moeda de Reemissão\"\n- multa = campo \"Taxa por Mudança\" (isto é a multa, apesar do rótulo). Se estiver escrito \"N/A\", use 0.\n- outros_valores = soma dos campos \"Outro Imposto\" e \"Taxa de Serviço\" que estiverem preenchidos; se todos estiverem vazios, use 0.\n- total_a_cobrar = o \"Total\" FINAL, isolado, que aparece ABAIXO dos campos de multa/imposto/taxa de serviço. NÃO use a linha \"Total:\" intermediária (subtotal de BASE + Taxas, às vezes escrita \"NO ADC\"). Se esse total final não estiver visível, use null.\n- Se houver linhas BASE USD e EQV, o cálculo é INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"USD\".\n  - eqv_antiga = linha EQV, coluna \"Trocar\"\n  - eqv_nova = linha EQV, coluna \"Nova Quantia\"\n  - dif_tarifa_brl = linha EQV, coluna \"Moeda de Reemissão\" (diferença em BRL)\n  - A multa já vem em BRL: multa_moeda = \"BRL\" e NÃO converta.\n- Se não houver BASE USD, tipo = \"NAC\", moeda_emissao = \"BRL\" e tudo está em BRL (multa_moeda = \"BRL\").\n- total_moeda só pode ter valor se total_a_cobrar tiver número; caso contrário, null.\n\n2) NDC Farelogix (\"Bilhete Antigo\", \"Bilhete Novo\", \"Cálculo da troca\")\n- NDC é sempre INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"USD\".\n- tarifa_antiga = \"Passagem original na tarifa-base\"\n- tarifa_nova = \"Tarifa-base nova\"\n- dif_tarifa = \"Diferença da tarifa-base\" (em USD)\n- cambio = \"Taxa de conversão de moeda\" (está explícito na tela)\n- dif_tarifa_brl = \"Diferença na moeda de venda\"\n- dif_taxas = \"Impostos de coleta de acréscimo\"\n- multa = campo \"Multa\"\n- penalidades_fiscais = \"Penalidades fiscais a pagar\"\n- total_a_cobrar = linha final (\"Total Forfeit\" ou \"Coleta de acréscimo\"), total_moeda = \"BRL\"\n- \"Impostos residuais\" são só informativos: coloque em observacoes, não em outro campo.\n\n3) NDC Amadeus (tudo em BRL)\n- NDC é sempre INTERNACIONAL: tipo = \"INTER\", moeda_emissao = \"BRL\", multa_moeda = \"BRL\".\n- dif_tarifa = \"Diferença de preço\" (leia o valor direto da tela, NÃO recalcule)\n- multa = \"Multas\"\n- tarifa_antiga e tarifa_nova = coluna Tarifa da tabela, antigo → novo\n\n4) Sabre \"Sumário da Comparação do Bilhete\" (colunas \"Reemissão\", \"Novo\" e \"Reemissão (Reissue)\"; linhas \"Tarifa base\", \"Tarifa equivalente\", \"Total das taxas\", \"Tarifa total\", \"Valor da multa por alteração\", \"Total\")\n- sistema = \"sabre-comparacao\"\n- A moeda da linha \"Tarifa base\" decide: se for diferente de BRL (ex.: USD), tipo = \"INTER\" e moeda_emissao = essa moeda; se for BRL, tipo = \"NAC\" e moeda_emissao = \"BRL\".\n- A primeira coluna (\"Reemissão\") é o bilhete antigo; \"Novo\" é o bilhete novo; a ÚLTIMA coluna (\"Reemissão (Reissue)\") é a diferença a cobrar.\n- tarifa_antiga = \"Tarifa base\", primeira coluna\n- tarifa_nova = \"Tarifa base\", coluna \"Novo\"\n- dif_tarifa = \"Tarifa base\", última coluna\n- dif_tarifa_brl = \"Tarifa equivalente\", última coluna (só no internacional)\n- taxas_antiga = \"Total das taxas\", primeira coluna\n- taxas_nova = \"Total das taxas\", coluna \"Novo\"\n- dif_taxas = \"Total das taxas\", última coluna (em BRL)\n- multa = \"Valor da multa por alteração\"; se estiver \"N/A\" ou vazio, use 0. multa_moeda = \"BRL\".\n- total_a_cobrar = linha \"Total\", última coluna; total_moeda = \"BRL\"\n\n5) FXO (texto de terminal Amadeus, com linhas como \"OLD BASE FARE\", \"NEW BASE FARE\", \"FARE BALANCE\", \"TAX BALANCE\", \"PENALTY\", \"GRAND TOTAL\", \"TOTAL ADD COLL\")\n- Aqui você NÃO interpreta nada: só transcreve. sistema = \"fxo\".\n- Em \"texto_fxo\", devolva o texto do print EXATAMENTE como está, linha por linha (separe as linhas com \\n): mesmas letras maiúsculas, mesmos números, pontos, sinais e espaços. Não corrija, não complete, não traduza, não resuma, não reordene e não pule linhas.\n- Em linhas que tenham nome de passageiro, número de bilhete ou localizador, troque só esse trecho por XXXX e mantenha o resto da linha (ex.: \"(CHD)\", \"(INF)\").\n- Todos os outros campos ficam null. Se alguma linha estiver ilegível, escreva até onde conseguir ler e cite a linha em \"observacoes\".\n\nFORMATO DA RESPOSTA (use exatamente estas chaves)\n```json\n{\n  \"sistema\": \"e-latam | e-gol | ndc-farelogix | ndc-amadeus | sabre-comparacao | fxo | desconhecido\",\n  \"tipo\": \"NAC | INTER | null\",\n  \"moeda_emissao\": \"BRL | USD | EUR | null\",\n  \"tarifa_antiga\": null,\n  \"tarifa_nova\": null,\n  \"dif_tarifa\": null,\n  \"taxas_antiga\": null,\n  \"taxas_nova\": null,\n  \"eqv_antiga\": null,\n  \"eqv_nova\": null,\n  \"dif_tarifa_brl\": null,\n  \"dif_taxas\": null,\n  \"multa\": null,\n  \"multa_moeda\": null,\n  \"penalidades_fiscais\": null,\n  \"outros_valores\": null,\n  \"cambio\": null,\n  \"total_a_cobrar\": null,\n  \"total_moeda\": null,\n  \"texto_fxo\": null,\n  \"campos_nao_lidos\": [\"nomes dos campos que ficaram null por não estarem visíveis\"],\n  \"observacoes\": \"dúvidas, leituras incertas ou algo que não bateu; vazio se nada\"\n}\n```\nEm caso de dúvida sobre qualquer valor, deixe null e cite o campo em \"campos_nao_lidos\".";
 // ----- core: leitura devolvida pelo Copilot (JSON) -> campos da calculadora (puro, sem DOM) -----
 // O atendente anexa o print no Copilot corporativo, copia o JSON que ele devolve e cola na
 // calculadora. Nada daqui faz chamada de rede. Regra de ouro (confiabilidade): na duvida, o campo
@@ -2611,7 +2623,9 @@ const COPILOT_PROMPT = "Você vai ler o print de tela anexado, de um sistema de 
 //   { ok:false, erro }                                           -> nao deu para usar
 //   { ok:true, sistema, tipo, moeda, tipoPax, campos:[{id,rotulo,valor,select?}],  // valor ja no formato da tela (1234,56)
 //     emBranco:[{rotulo,motivo}], infos:[texto], totalLido, totalMoeda, cambioImplicito }
-const COPILOT_SISTEMAS = ["e-latam", "e-gol", "ndc-farelogix", "ndc-amadeus"];
+// "fxo" = print do texto do FXO (Amadeus): a IA so TRANSCREVE o texto; quem interpreta os valores e o leitor de FXO
+// da calculadora (regras fixas). "sabre-comparacao" = tela "Sumario da Comparacao do Bilhete" (Sabre).
+const COPILOT_SISTEMAS = ["e-latam", "e-gol", "ndc-farelogix", "ndc-amadeus", "sabre-comparacao", "fxo"];
 const COPILOT_MOEDAS_INTER = ["USD", "EUR", "GBP", "CNY"]; // opcoes do seletor inter_cur
 
 // numero estrito: so number finito ou string "1234.56" (ponto decimal). Virgula/milhar = invalido.
@@ -2647,7 +2661,8 @@ function lerLeituraCopilot(texto, tipoPax){
   const sistema = String(o.sistema || "").trim().toLowerCase();
   if(!sistema) return { ok:false, erro: "O JSON não informa o sistema." };
   if(sistema === "desconhecido") return { ok:false, erro: "O Copilot não reconheceu o sistema do print" + (o.observacoes ? ": " + o.observacoes : ".") };
-  if(!COPILOT_SISTEMAS.includes(sistema)) return { ok:false, erro: `Sistema "${sistema}" ainda não é preenchido automaticamente (por enquanto só E-Latam/E-Gol e NDC Farelogix/Amadeus).` };
+  if(!COPILOT_SISTEMAS.includes(sistema)) return { ok:false, erro: `Sistema "${sistema}" ainda não é preenchido automaticamente (por enquanto só E-Latam/E-Gol, NDC Farelogix/Amadeus, Sabre "Sumário da Comparação" e o texto do FXO).` };
+  if(sistema === "fxo") return copilotLeFxo(o, tipoPax);
 
   const tipoLido = String(o.tipo || "").trim().toUpperCase();
   const ehNdc = sistema.indexOf("ndc-") === 0;
@@ -2679,8 +2694,17 @@ function lerLeituraCopilot(texto, tipoPax){
 
   const ehFarelogix = sistema === "ndc-farelogix";
   const ehAmadeus = sistema === "ndc-amadeus";
+  const ehSabre = sistema === "sabre-comparacao";
+  const ehELatam = sistema === "e-latam" || sistema === "e-gol";
   const multaMoeda = String(o.multa_moeda || "").trim().toUpperCase();
   let moeda = String(o.moeda_emissao || "").trim().toUpperCase();
+  // Conferencia aritmetica: se os numeros lidos nao fecham entre si, a IA errou um digito ou trocou uma coluna.
+  // Nesse caso NADA e preenchido (melhor digitar do que lancar valor errado).
+  const conf = copilotConfere(sistema, tipo, o);
+  if(conf.falhas.length){
+    return { ok:false, conferencias: conf.itens,
+      erro: "As leituras não fecham entre si, então nada foi preenchido (a IA pode ter errado um dígito ou trocado uma coluna). Confira o print e peça a leitura de novo: " + conf.falhas.map(x => x.texto).join(" • ") };
+  }
 
   if(tipo === "INTER"){
     if(!/^[A-Z]{3}$/.test(moeda)){
@@ -2697,9 +2721,16 @@ function lerLeituraCopilot(texto, tipoPax){
     const taxas = ehAmadeus ? null : num("dif_taxas", `Dif. taxa (${T})`, `inter_tax_${T}`);
     if(ehAmadeus) limpa(`inter_tax_${T}`, `Dif. taxa (${T})`, "(em branco: já está na Diferença de preço)");
     if(taxas !== null){
-      // Farelogix mostra as taxas em BRL, e o campo da calculadora é na moeda de emissão: sem converter por conta propria
-      if(ehFarelogix && taxas !== 0) emBranco.push({ rotulo: `Dif. taxa (${T})`, motivo: `veio em BRL (${copilotFmt(taxas)}) e o campo é na moeda ${moeda}; lance manualmente`, ids: [`inter_tax_${T}`] });
-      else poe(`inter_tax_${T}`, `Dif. taxa (${T})`, taxas);
+      // Estes sistemas mostram a diferença de taxas em BRL (Farelogix; Sabre; E-Latam/E-Gol quando há a linha EQV em BRL),
+      // e o campo da calculadora é na moeda de emissão: sem converter por conta própria. Valor 0 não tem moeda, entra normal.
+      const taxasEmBrl = moeda !== "BRL" && (ehFarelogix || ehSabre || (ehELatam && copilotNumero(o.dif_tarifa_brl) !== null));
+      if(taxasEmBrl && taxas !== 0){
+        // referência só para consulta (nunca preenchida): câmbio explícito do print ou o que a diferença de tarifa implica
+        const cEx = copilotNumero(o.cambio), dB = copilotNumero(o.dif_tarifa), dBrl = copilotNumero(o.dif_tarifa_brl);
+        const cRef = (cEx > 0) ? cEx : ((dB > 0 && dBrl > 0) ? dBrl / dB : null);
+        const dica = cRef ? ` Referência (não preenchida): ≈ ${moeda} ${copilotFmt(taxas / cRef)} ao câmbio ${cRef.toFixed(4).replace(".", ",")} do print.` : "";
+        emBranco.push({ rotulo: `Dif. taxa (${T})`, motivo: `veio em BRL (${copilotFmt(taxas)}) e o campo é na moeda ${moeda}; lance manualmente.${dica}`, ids: [`inter_tax_${T}`] });
+      }else poe(`inter_tax_${T}`, `Dif. taxa (${T})`, taxas);
     }
 
     // Multa: so um dos dois campos (na moeda OU em BRL) recebe o valor; o outro e zerado. Multa 0 zera os dois.
@@ -2769,7 +2800,425 @@ function lerLeituraCopilot(texto, tipoPax){
   const obs = String(o.observacoes || "").trim();
   if(obs) infos.push("Observação do Copilot: " + obs);
 
-  return { ok:true, sistema, tipo, moeda, tipoPax: T, campos, emBranco, infos, totalLido, totalMoeda, cambioImplicito, totalEsperado };
+  if(!conf.itens.length && sistema !== "ndc-amadeus") infos.push("Conferência aritmética: faltaram valores no print para cruzar os números (nenhuma conta pôde ser feita). Confira com atenção.");
+
+  return { ok:true, sistema, tipo, moeda, tipoPax: T, campos, emBranco, infos, conferencias: conf.itens, totalLido, totalMoeda, cambioImplicito, totalEsperado };
+}
+
+// ----- conferencia aritmetica das leituras (puro) -----
+// "Sem falhas" nao se garante lendo melhor: garante-se CONFERINDO. Cada conta so e feita se todos os numeros dela
+// foram lidos; se uma conta nao fecha, a leitura inteira e recusada (nada e preenchido). Tolerancias: centavos de
+// arredondamento (0,011), soma de varias parcelas (0,06) e, no produto por cambio, meia unidade da 4a casa do cambio.
+function copilotConfere(sistema, tipo, o){
+  const itens = [];
+  const n = (k) => copilotNumero(o[k]);
+  const up = (k) => String(o[k] || "").trim().toUpperCase();
+  const confere = (rotulo, calculado, lido, tol, expr)=>{
+    const ok = Math.abs(calculado - lido) <= tol;
+    itens.push({ ok, texto: ok ? `${rotulo} (${expr} = ${copilotFmt(calculado)})` : `${rotulo}: ${expr} = ${copilotFmt(calculado)}, mas a leitura traz ${copilotFmt(lido)}` });
+  };
+  // NDC Amadeus: sem colunas para cruzar (o proprio sistema entrega a "Diferenca de preco"); o total esperado ja e conferido na tela
+  if(sistema === "ndc-amadeus") return { itens, falhas: [] };
+
+  const nova = n("tarifa_nova"), antiga = n("tarifa_antiga"), difT = n("dif_tarifa");
+  if(nova !== null && antiga !== null && difT !== null) confere("Tarifa nova − antiga = diferença da tarifa", nova - antiga, difT, 0.011, `${copilotFmt(nova)} − ${copilotFmt(antiga)}`);
+  const txN = n("taxas_nova"), txA = n("taxas_antiga"), difTx = n("dif_taxas");
+  if(txN !== null && txA !== null && difTx !== null) confere("Taxas novas − antigas = diferença de taxas", txN - txA, difTx, 0.011, `${copilotFmt(txN)} − ${copilotFmt(txA)}`);
+  const cambio = n("cambio"), difBrl = n("dif_tarifa_brl");
+  if(sistema === "ndc-farelogix" && difT !== null && cambio !== null && difBrl !== null) {
+    confere("Diferença da tarifa × câmbio = diferença em BRL", difT * cambio, difBrl, 0.02 + Math.abs(difT) * 0.00006, `${copilotFmt(difT)} × ${cambio.toFixed(4).replace(".", ",")}`);
+  }
+
+  // total final = parcelas, todas na moeda do total (BRL). Internacional: diferenca da tarifa em BRL (EQV) + taxas + multa (+ penalidades fiscais + outros).
+  const total = n("total_a_cobrar"), totalMoeda = up("total_moeda"), multa = n("multa"), multaMoeda = up("multa_moeda");
+  const base = (tipo === "INTER") ? difBrl : difT;
+  const totalEmBrl = totalMoeda === "BRL" || (tipo === "NAC" && !totalMoeda);
+  const multaEmBrl = multa === 0 || multaMoeda === "BRL" || (tipo === "NAC" && !multaMoeda);
+  if(total !== null && totalEmBrl && multa !== null && multaEmBrl && base !== null && difTx !== null){
+    const pen = n("penalidades_fiscais") || 0, outros = n("outros_valores") || 0;
+    const partes = [base, difTx, multa];
+    let expr = partes.map(copilotFmt).join(" + ");
+    if(pen){ partes.push(pen); expr += " + " + copilotFmt(pen); }
+    if(outros){ partes.push(outros); expr += " + " + copilotFmt(outros); }
+    confere("Diferença da tarifa + taxas + multa = total a cobrar", partes.reduce((a, b) => a + b, 0), total, 0.06, expr);
+  }
+  return { itens, falhas: itens.filter(i => !i.ok) };
+}
+
+// ----- FXO em imagem: a IA so TRANSCREVE o texto; quem interpreta e o leitor de FXO da calculadora (regras fixas) -----
+function copilotLeFxo(o, tipoPax){
+  const T = ["ADT","CHD","INF"].includes(tipoPax) ? tipoPax : "ADT";
+  const texto = String(o.texto_fxo || "").replace(/\r\n?/g, "\n").replace(/```[a-z]*\n?/gi, "").trim();
+  if(!texto) return { ok:false, erro: "O Copilot não devolveu o texto do FXO (o campo \"texto_fxo\" veio vazio)." };
+  if(!/FARE\s+BALANCE|TOTAL\s+ADD\s+COLL|GRAND\s+TOTAL/i.test(texto)) return { ok:false, erro: "O texto devolvido não parece um FXO (não achei FARE BALANCE, GRAND TOTAL nem TOTAL ADD COLL)." };
+
+  // valores por moeda de uma linha rotulada, ex.: "TAX BALANCE BRL 1790.37 USD 355.40" -> { BRL:1790.37, USD:355.40 }
+  const val = (rotulo)=>{
+    const m = texto.match(new RegExp("^[ \\t]*" + rotulo + "([^\\n]*)", "im"));
+    if(!m) return null;
+    const out = {};
+    for(const x of m[1].matchAll(/\b([A-Z]{3})\s+(-?\d+(?:\.\d+)?)/g)) if(!(x[1] in out)) out[x[1]] = Number(x[2]);
+    return out;
+  };
+  const itens = [];
+  const confere = (rotulo, calculado, lido, tol, expr)=>{
+    const ok = Math.abs(calculado - lido) <= tol;
+    itens.push({ ok, texto: ok ? `${rotulo} (${expr} = ${copilotFmt(calculado)})` : `${rotulo}: ${expr} = ${copilotFmt(calculado)}, mas o texto traz ${copilotFmt(lido)}` });
+  };
+  const velha = val("OLD\\s+BASE\\s+FARE"), nova = val("NEW\\s+BASE\\s+FARE"), fare = val("FARE\\s+BALANCE");
+  const tax = val("TAX\\s+BALANCE"), pen = val("PENALTY"), grand = val("GRAND\\s+TOTAL");
+  for(const cur of Object.keys(fare || {})){
+    if(velha && nova && cur in velha && cur in nova) confere(`FXO ${cur}: NEW BASE FARE − OLD BASE FARE = FARE BALANCE`, nova[cur] - velha[cur], fare[cur], 0.011, `${copilotFmt(nova[cur])} − ${copilotFmt(velha[cur])}`);
+    if(grand && cur in grand && tax && cur in tax){
+      const p = (pen && cur in pen) ? pen[cur] : 0;
+      confere(`FXO ${cur}: FARE BALANCE + TAX BALANCE + PENALTY = GRAND TOTAL`, fare[cur] + tax[cur] + p, grand[cur], 0.06, `${copilotFmt(fare[cur])} + ${copilotFmt(tax[cur])} + ${copilotFmt(p)}`);
+    }
+  }
+  const falhas = itens.filter(i => !i.ok);
+  if(falhas.length){
+    return { ok:false, conferencias: itens,
+      erro: "A transcrição do FXO não fecha nas contas, então nada foi colado (a IA pode ter errado um dígito): " + falhas.map(x => x.texto).join(" • ") };
+  }
+  const infos = ["Print do FXO: a IA só transcreveu o texto; quem interpreta os valores é o leitor de FXO da calculadora (regras fixas), igual a quando você cola o texto."];
+  if(!itens.length) infos.push("Conferência aritmética: não deu para cruzar os números da transcrição (faltaram linhas). Confira o texto colado com o print.");
+  const obs = String(o.observacoes || "").trim();
+  if(obs) infos.push("Observação do Copilot: " + obs);
+  return { ok:true, sistema:"fxo", tipo:"INTER", moeda:null, tipoPax:T, campos:[], emBranco:[], infos, textoFxo:texto, conferencias: itens,
+    totalLido:null, totalMoeda:null, cambioImplicito:null, totalEsperado:null };
+}
+// ----- core: OCR (Tesseract) -> o MESMO JSON que o agente do Copilot devolve (puro, sem DOM, sem rede) -----
+// Entrada: a tabela de palavras do Tesseract (TSV: level page block par line word left top width height conf text).
+// Saida: { ok, sistema, obj, avisos } (obj segue o formato de ia-agente/prompt_leitor_reemissao.md e entra em
+// lerLeituraCopilot, que faz as conferencias aritmeticas e a previa) ou { ok:false, erro }.
+//
+// Regra de ouro (igual a do Copilot): na duvida o campo fica null. Nada e adivinhado, corrigido ou completado:
+//  - numero so e aceito em formato estrito (1234.56 | 1.234,56 | 1234,56) e com confianca do OCR >= OCR_CONF_MIN;
+//  - "205200" (ponto decimal perdido), "24597", "6512664" NAO sao consertados: viram null com aviso;
+//  - letras coladas na frente do numero ("PD430.46", "BRL144,75") sao descartadas, o numero fica.
+const OCR_CONF_MIN = 70;
+const OCR_MOEDAS = ["BRL", "USD", "EUR", "GBP", "CNY"];
+
+function ocrParseTsv(tsv){
+  const out = [];
+  for(const linha of String(tsv || "").split(/\r?\n/)){
+    const c = linha.split("\t");
+    if(c.length < 12 || c[0] !== "5") continue;            // nivel 5 = palavra
+    const t = c.slice(11).join("\t").trim();
+    if(!t) continue;
+    const x0 = +c[6], y0 = +c[7], w = +c[8], h = +c[9], conf = +c[10];
+    if(![x0, y0, w, h, conf].every(Number.isFinite)) continue;
+    out.push({ t, x0, y0, x1: x0 + w, y1: y0 + h, cx: x0 + w / 2, cy: y0 + h / 2, h, conf });
+  }
+  return out;
+}
+
+function ocrNorm(s){
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function ocrDist(a, b){
+  const m = a.length, n = b.length;
+  if(!m) return n;
+  if(!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for(let i = 1; i <= m; i++){
+    const cur = [i];
+    for(let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// a linha COMECA com o rotulo (tolerando `tol` erros de OCR: "Servigo", "Reemissado")
+function ocrComeca(L, chave, tol){
+  const k = ocrNorm(chave), t = tol === undefined ? Math.min(2, Math.floor(k.length / 5)) : tol;
+  for(let d = -1; d <= 2; d++){
+    const n = k.length + d;
+    if(n < 1) continue;
+    if(ocrDist(L.norm.slice(0, n), k) <= t) return true;
+  }
+  return false;
+}
+// o texto contem o rotulo em qualquer posicao (com a mesma tolerancia)
+function ocrContem(norm, chave, tol){
+  const k = ocrNorm(chave), t = tol === undefined ? Math.min(2, Math.floor(k.length / 5)) : tol;
+  if(norm.includes(k)) return true;
+  if(t === 0) return false;
+  for(let d = -1; d <= 1; d++){
+    const n = k.length + d;
+    for(let i = 0; i + n <= norm.length; i++) if(ocrDist(norm.slice(i, i + n), k) <= t) return true;
+  }
+  return false;
+}
+
+// agrupa palavras em linhas pela altura (y) e ordena cada linha da esquerda para a direita
+function ocrLinhas(words){
+  const ws = words.slice().sort((a, b) => a.cy - b.cy);
+  const linhas = [];
+  for(const w of ws){
+    const L = linhas[linhas.length - 1];
+    if(L && Math.abs(w.cy - L.cy) <= Math.max(w.h, L.h) * 0.6){
+      L.words.push(w);
+      L.cy = L.words.reduce((s, x) => s + x.cy, 0) / L.words.length;
+      L.h = Math.max(L.h, w.h);
+    }else linhas.push({ cy: w.cy, h: w.h, words: [w] });
+  }
+  for(const L of linhas){
+    L.words.sort((a, b) => a.x0 - b.x0);
+    L.texto = L.words.map(w => w.t).join(" ");
+    L.norm = ocrNorm(L.texto);
+  }
+  return linhas;
+}
+
+// numero estrito de uma palavra; null se nao for valor monetario completo
+function ocrValor(t){
+  const s = String(t || "").trim().replace(/[:;*]+$/, "");
+  const m = s.match(/^[A-Za-z]{0,3}(-?\d[\d.,]*)$/);
+  if(!m) return null;
+  const n = m[1];
+  if(/^-?\d{1,3}(\.\d{3})+,\d{2}$/.test(n) || /^-?\d+,\d{2}$/.test(n)) return Number(n.replace(/\./g, "").replace(",", "."));
+  if(/^-?\d+\.\d{2}$/.test(n)) return Number(n);
+  return null;
+}
+// taxa de conversao: "x5,5007" ou "5,5007" (4 a 6 casas)
+function ocrCambio(t){
+  const m = String(t || "").trim().match(/^[xX×]?(\d+[,.]\d{4,6})$/);
+  return m ? Number(m[1].replace(",", ".")) : null;
+}
+
+// valores validos de uma linha, com posicao; `suspeitos` = numeros que o OCR leu mas nao fecham o formato (ponto perdido etc.)
+function ocrNumeros(L, aviso){
+  const out = [];
+  for(const w of L.words){
+    if(/^-?\d[\d.,]*$/.test(w.t.replace(/^[A-Za-z]{1,3}(?=-?\d)/, "")) && ocrValor(w.t) === null && /\d{3,}/.test(w.t) && aviso){
+      aviso(`"${w.t}" (${L.texto.slice(0, 28)}…) foi lido sem o formato de valor (ponto decimal perdido?) e ficou em branco.`);
+    }
+    const v = ocrValor(w.t);
+    if(v === null) continue;
+    if(w.conf < OCR_CONF_MIN){
+      if(aviso) aviso(`"${w.t}" (${L.texto.slice(0, 28)}…) foi lido com pouca confiança (${Math.round(w.conf)}%) e ficou em branco.`);
+      continue;
+    }
+    out.push({ v, cx: w.cx, w });
+  }
+  return out;
+}
+
+function ocrMoedaNaLinha(L){
+  for(const w of L.words){
+    const u = w.t.toUpperCase().replace(/[^A-Z]/g, "");
+    if(OCR_MOEDAS.includes(u)) return u;
+  }
+  return null;
+}
+
+// coluna (0..n-1) do numero, pelo centro mais proximo; -1 se estiver longe demais de todos
+function ocrColuna(cx, centros, largura){
+  let melhor = -1, d = Infinity;
+  centros.forEach((c, i) => { const x = Math.abs(cx - c); if(x < d){ d = x; melhor = i; } });
+  return d <= largura * 0.12 ? melhor : -1;
+}
+// valores de uma linha distribuidos nas colunas de referencia ([c1,c2,c3] -> [v1|null, v2|null, v3|null])
+function ocrPorColuna(L, centros, largura, aviso){
+  const cols = centros.map(() => null);
+  for(const n of ocrNumeros(L, aviso)){
+    const i = ocrColuna(n.cx, centros, largura);
+    if(i >= 0 && cols[i] === null) cols[i] = n.v;
+  }
+  return cols;
+}
+
+function ocrVazio(){
+  return { sistema: null, tipo: null, moeda_emissao: null, tarifa_antiga: null, tarifa_nova: null, dif_tarifa: null, taxas_antiga: null, taxas_nova: null,
+    eqv_antiga: null, eqv_nova: null, dif_tarifa_brl: null, dif_taxas: null, multa: null, multa_moeda: null, penalidades_fiscais: null, outros_valores: null,
+    cambio: null, total_a_cobrar: null, total_moeda: null, texto_fxo: null, campos_nao_lidos: [], observacoes: "" };
+}
+function ocrFecha(obj, avisos){
+  for(const k of Object.keys(obj)){
+    if(k === "campos_nao_lidos" || k === "observacoes" || k === "texto_fxo" || k === "sistema") continue;
+    if(obj[k] === null) obj.campos_nao_lidos.push(k);
+  }
+  obj.observacoes = "Lido por OCR no navegador (confira com o print)." + (avisos.length ? " " + avisos.join(" ") : "");
+  return obj;
+}
+const ocrNA = (L) => L.words.some(w => /^n\/?a$/i.test(w.t.replace(/[^A-Za-z/]/g, "")));
+
+// ---------- E-Latam / E-Gol ----------
+function ocrLeELatam(linhas, largura, avisos){
+  const o = ocrVazio(); o.sistema = "e-latam";
+  const av = (m) => avisos.push(m);
+  const base = linhas.find(l => ocrComeca(l, "base", 0) && ocrMoedaNaLinha(l));
+  if(!base) { avisos.push("Linha BASE não encontrada."); return ocrFecha(o, avisos); }
+  o.moeda_emissao = ocrMoedaNaLinha(base);
+  const ref = ocrNumeros(base, av);
+  if(ref.length < 3){ avisos.push("A linha BASE não trouxe os 3 valores (Trocar / Nova Quantia / Moeda de Reemissão) com segurança; nada foi lido das colunas."); return ocrFecha(o, avisos); }
+  const centros = ref.slice(0, 3).map(n => n.cx);
+  [o.tarifa_antiga, o.tarifa_nova, o.dif_tarifa] = ref.slice(0, 3).map(n => n.v);
+
+  const eqv = linhas.find(l => ocrComeca(l, "eqv", 0));
+  if(eqv) [o.eqv_antiga, o.eqv_nova, o.dif_tarifa_brl] = ocrPorColuna(eqv, centros, largura, av);
+  const tx = linhas.find(l => ocrComeca(l, "taxas", 1));
+  if(tx) [o.taxas_antiga, o.taxas_nova, o.dif_taxas] = ocrPorColuna(tx, centros, largura, av);
+
+  o.tipo = (o.moeda_emissao !== "BRL") ? "INTER" : "NAC";
+  const multaL = linhas.find(l => ocrComeca(l, "taxa por mudanca", 3));
+  if(multaL){
+    if(ocrNA(multaL)) o.multa = 0;
+    else { const n = ocrNumeros(multaL, av); if(n.length) o.multa = n[n.length - 1].v; }
+    o.multa_moeda = "BRL";
+  }
+  // "Outro Imposto" + "Taxa de Servico" (duas linhas): so entram os preenchidos; todos vazios = 0
+  let outros = 0;
+  for(const l of linhas){
+    if(ocrComeca(l, "outro imposto", 2) || ocrComeca(l, "taxa de servico", 3)){
+      for(const n of ocrNumeros(l, av)) outros += n.v;
+    }
+  }
+  o.outros_valores = Math.round(outros * 100) / 100;
+  // total FINAL: o ultimo "Total" abaixo da multa (o "Total:" de cima e o subtotal BASE + Taxas)
+  const abaixo = (multaL || tx || base).cy;
+  const totais = linhas.filter(l => ocrComeca(l, "total", 1) && l.cy > abaixo && ocrNumeros(l).length);
+  if(totais.length){ const n = ocrNumeros(totais[totais.length - 1], av); o.total_a_cobrar = n[n.length - 1].v; o.total_moeda = "BRL"; }
+  return ocrFecha(o, avisos);
+}
+
+// ---------- NDC Farelogix ----------
+function ocrLeFarelogix(linhas, largura, avisos){
+  const o = ocrVazio(); o.sistema = "ndc-farelogix"; o.tipo = "INTER"; o.moeda_emissao = "USD"; o.multa_moeda = "BRL";
+  const av = (m) => avisos.push(m);
+  // primeiro valor do rotulo, a direita dele (as colunas da direita pertencem ao outro painel da tela)
+  const valor = (chave, tol) => {
+    const l = linhas.find(x => ocrComeca(x, chave, tol));
+    if(!l) { avisos.push(`Linha "${chave}" não encontrada.`); return null; }
+    const n = ocrNumeros(l, av);
+    return n.length ? n[0].v : null;
+  };
+  o.tarifa_nova = valor("tarifa-base nova", 2);
+  const orig = valor("passagem original na tarifa-base", 3);
+  o.tarifa_antiga = orig === null ? null : Math.abs(orig);
+  o.dif_tarifa = valor("diferenca da tarifa-base", 3);
+  o.dif_tarifa_brl = valor("diferenca na moeda de venda", 3);
+  o.dif_taxas = valor("impostos de coleta de acrescimo", 3);
+  o.penalidades_fiscais = valor("penalidades fiscais a pagar", 3);
+  o.multa = valor("multa", 1);
+  const cl = linhas.find(l => ocrComeca(l, "taxa de conversao de moeda", 3));
+  if(cl){ for(const w of cl.words){ const c = ocrCambio(w.t); if(c !== null && w.conf >= OCR_CONF_MIN){ o.cambio = c; break; } } }
+  const tot = linhas.find(l => ocrComeca(l, "coleta de acrescimo", 2) || ocrComeca(l, "total forfeit", 2));
+  if(tot){ const n = ocrNumeros(tot, av); if(n.length){ o.total_a_cobrar = n[n.length - 1].v; o.total_moeda = ocrMoedaNaLinha(tot) || "BRL"; } }
+  const res = linhas.find(l => ocrComeca(l, "impostos residuais", 3));
+  if(res){ const n = ocrNumeros(res); if(n.length && n[0].v !== 0) avisos.push(`Impostos residuais: ${n[0].v.toFixed(2)} (só informativo).`); }
+  return ocrFecha(o, avisos);
+}
+
+// ---------- NDC Amadeus ----------
+function ocrLeAmadeus(linhas, largura, avisos){
+  const o = ocrVazio(); o.sistema = "ndc-amadeus"; o.tipo = "INTER"; o.moeda_emissao = "BRL"; o.multa_moeda = "BRL";
+  const av = (m) => avisos.push(m);
+  const rot = linhas.find(l => ocrContem(l.norm, "diferenca de preco") && ocrContem(l.norm, "multas"));
+  if(!rot){ avisos.push('Não achei os rótulos "Diferença de preço" e "Multas".'); return ocrFecha(o, avisos); }
+  const wd = rot.words.find((w, i) => ocrNorm(w.t).startsWith("difere"));
+  const wm = rot.words.find(w => ocrDist(ocrNorm(w.t), "multas") <= 1);
+  const abaixo = linhas.filter(l => l.cy > rot.cy).slice(0, 3).find(l => ocrNumeros(l).length >= 2);
+  if(abaixo && wd && wm){
+    for(const n of ocrNumeros(abaixo, av)){
+      if(Math.abs(n.cx - wd.cx) <= Math.abs(n.cx - wm.cx)) { if(o.dif_tarifa === null) o.dif_tarifa = n.v; }
+      else if(o.multa === null) o.multa = n.v;
+    }
+  }else avisos.push('Não achei os dois valores logo abaixo de "Diferença de preço" e "Multas".');
+  // tabela (so para conferir): colunas pelas 3 posicoes da linha "Valores totais"
+  const tot = linhas.find(l => ocrComeca(l, "valores totais", 3));
+  const ref = tot ? ocrNumeros(tot) : [];
+  if(ref.length >= 3){
+    const centros = ref.slice(0, 3).map(n => n.cx);
+    const tar = linhas.find(l => ocrComeca(l, "tarifa", 1) && !ocrComeca(l, "tarifa total", 2));
+    if(tar){ const c = ocrPorColuna(tar, centros, largura, av); o.tarifa_antiga = c[0]; o.tarifa_nova = c[1]; }
+  }
+  return ocrFecha(o, avisos);
+}
+
+// ---------- Sabre "Sumario da Comparacao do Bilhete" ----------
+function ocrLeSabre(linhas, largura, avisos){
+  const o = ocrVazio(); o.sistema = "sabre-comparacao"; o.multa_moeda = "BRL"; o.total_moeda = "BRL";
+  const av = (m) => avisos.push(m);
+  const tb = linhas.find(l => ocrComeca(l, "tarifa base", 2));
+  if(!tb){ avisos.push('Linha "Tarifa base" não encontrada.'); return ocrFecha(o, avisos); }
+  o.moeda_emissao = ocrMoedaNaLinha(tb);
+  const ref = ocrNumeros(tb, av);
+  if(ref.length < 3){ avisos.push('A linha "Tarifa base" não trouxe os 3 valores (Reemissão / Novo / Reemissão (Reissue)) com segurança.'); return ocrFecha(o, avisos); }
+  const centros = ref.slice(0, 3).map(n => n.cx);
+  [o.tarifa_antiga, o.tarifa_nova, o.dif_tarifa] = ref.slice(0, 3).map(n => n.v);
+  o.tipo = (o.moeda_emissao && o.moeda_emissao !== "BRL") ? "INTER" : "NAC";
+  const eq = linhas.find(l => ocrComeca(l, "tarifa equivalente", 3));
+  if(eq) o.dif_tarifa_brl = ocrPorColuna(eq, centros, largura, av)[2];
+  const tx = linhas.find(l => ocrComeca(l, "total das taxas", 3));
+  if(tx) [o.taxas_antiga, o.taxas_nova, o.dif_taxas] = ocrPorColuna(tx, centros, largura, av);
+  const mu = linhas.find(l => ocrComeca(l, "valor da multa por alteracao", 4));
+  if(mu){ if(ocrNA(mu)) o.multa = 0; else { const n = ocrNumeros(mu, av); if(n.length) o.multa = n[n.length - 1].v; } }
+  const tt = linhas.find(l => ocrComeca(l, "total brl", 2));
+  if(tt){ const n = ocrNumeros(tt, av); if(n.length) o.total_a_cobrar = n[n.length - 1].v; }
+  return ocrFecha(o, avisos);
+}
+
+// ---------- FXO (texto de terminal Amadeus): so transcreve; o leitor de FXO interpreta ----------
+function ocrLeFxo(linhas, avisos){
+  const o = ocrVazio(); o.sistema = "fxo";
+  o.texto_fxo = linhas.map(l => l.texto).join("\n");
+  const baixa = linhas.flatMap(l => l.words).filter(w => /\d/.test(w.t) && w.conf < OCR_CONF_MIN);
+  if(baixa.length) avisos.push(`${baixa.length} palavra(s) com número lida(s) com pouca confiança: ${baixa.slice(0, 6).map(w => w.t).join(", ")}. A conferência das contas do FXO decide se o texto vale.`);
+  return ocrFecha(o, avisos);
+}
+
+const OCR_TELAS = "E-Latam/E-Gol, NDC Farelogix, NDC Amadeus, Sabre \"Sumário da Comparação\" e texto do FXO";
+
+function ocrDetectaSistema(linhas){
+  const tem = (chave, tol) => linhas.some(l => ocrContem(l.norm, chave, tol));
+  if(tem("old base fare", 1) || tem("fare balance", 1) || tem("total add coll", 1)) return "fxo";
+  if(tem("nova quantia", 1) || (tem("trocar", 0) && tem("reemissao", 2) && linhas.some(l => ocrComeca(l, "base", 0)))) return "e-latam";
+  if(tem("tarifa-base nova", 2) && tem("passagem original", 2)) return "ndc-farelogix";
+  if(tem("calculo da troca", 2) && tem("diferenca da tarifa-base", 3)) return "ndc-farelogix";
+  if(tem("diferenca de preco", 2) && tem("multas", 1)) return "ndc-amadeus";
+  if(tem("total das taxas", 2) && (tem("comparacao do bilhete", 3) || tem("tarifa base", 2))) return "sabre-comparacao";
+  return null;
+}
+
+// ponto de entrada: TSV do Tesseract -> { ok, sistema, obj, avisos } | { ok:false, erro }
+function leituraDeOcr(tsv){
+  const words = ocrParseTsv(tsv);
+  if(words.length < 5) return { ok: false, erro: "O OCR não encontrou texto suficiente na imagem. Use um print mais nítido e inteiro da tela." };
+  const linhas = ocrLinhas(words);
+  const largura = Math.max.apply(null, words.map(w => w.x1));
+  const sis = ocrDetectaSistema(linhas);
+  if(!sis) return { ok: false, erro: `Não reconheci a tela do print. Por enquanto o OCR lê: ${OCR_TELAS}. Para outra tela, use o Copilot ou digite os valores.` };
+  const avisos = [];
+  let obj;
+  if(sis === "fxo") obj = ocrLeFxo(linhas, avisos);
+  else if(sis === "e-latam") obj = ocrLeELatam(linhas, largura, avisos);
+  else if(sis === "ndc-farelogix") obj = ocrLeFarelogix(linhas, largura, avisos);
+  else if(sis === "ndc-amadeus") obj = ocrLeAmadeus(linhas, largura, avisos);
+  else obj = ocrLeSabre(linhas, largura, avisos);
+  return { ok: true, sistema: sis, obj, avisos };
+}
+
+// Varias tentativas (escalas diferentes da imagem): fica a leitura que PASSA nas contas e tem mais conferencias / menos campos em branco.
+// `tentativas` = [{ escala, tsv }]. Ex.: 3x acerta as tabelas; o texto monoespacado do FXO as vezes sai melhor sem ampliar.
+// Devolve { ok:true, escala, sistema, obj, avisos, leitura, tentativas:[resumo] } ou { ok:false, erro, tentativas:[resumo] }.
+function ocrEscolhe(tentativas){
+  const resumo = [];
+  let melhor = null, ultimoErro = null;
+  for(const t of tentativas){
+    const r = leituraDeOcr(t.tsv);
+    if(!r.ok){ resumo.push({ escala: t.escala, ok: false, motivo: r.erro }); ultimoErro = ultimoErro || r.erro; continue; }
+    const leitura = lerLeituraCopilot(JSON.stringify(r.obj), "ADT");
+    if(!leitura.ok){ resumo.push({ escala: t.escala, ok: false, motivo: leitura.erro }); ultimoErro = leitura.erro; continue; }
+    const confs = (leitura.conferencias || []).length;
+    const brancos = (leitura.emBranco || []).length + (r.obj.campos_nao_lidos || []).length;
+    const pontos = confs * 10 - brancos;
+    resumo.push({ escala: t.escala, ok: true, conferencias: confs, brancos, pontos });
+    if(!melhor || pontos > melhor.pontos) melhor = { escala: t.escala, sistema: r.sistema, obj: r.obj, avisos: r.avisos, leitura, pontos };
+  }
+  if(!melhor) return { ok: false, erro: ultimoErro || "O OCR não conseguiu ler este print.", tentativas: resumo };
+  return { ok: true, escala: melhor.escala, sistema: melhor.sistema, obj: melhor.obj, avisos: melhor.avisos, leitura: melhor.leitura, tentativas: resumo };
 }
     // ----- core: calculo de reemissao NAC/INTER (puro, sem DOM) -----
     // Recebem os dados ja lidos do formulario (ver readNacInputs/readInterInputs,
@@ -6853,6 +7302,20 @@ function copilotHtmlResultado(r){
     return `<div class="note" style="margin-top:8px"><b>Não foi possível usar esta resposta.</b><br>${escapeHtml(r.erro)}</div>`;
   }
   const tipoTxt = r.tipo === "NAC" ? "Nacional" : "Internacional";
+  // contas feitas entre os numeros lidos (se alguma nao fechasse, a leitura teria sido recusada)
+  const confs = (r.conferencias || []).length
+    ? `<ul class="small" style="margin:8px 0 0 18px">${r.conferencias.map(c => `<li>${c.ok ? "✔" : "✘"} ${escapeHtml(c.texto)}</li>`).join("")}</ul>`
+    : "";
+  if(r.sistema === "fxo"){
+    return `<div style="margin-top:8px">
+      <div><b>FXO (texto transcrito do print)</b> • Internacional • linha ${escapeHtml(r.tipoPax)}</div>
+      <pre style="margin:6px 0 0; padding:8px; max-height:220px; overflow:auto; white-space:pre-wrap; font-size:12px; background:rgba(0,0,0,.04); border-radius:8px">${escapeHtml(r.textoFxo)}</pre>
+      ${copilotValorTela("fxoBox_" + r.tipoPax) ? `<div class="muted small" style="margin-top:6px">O FXO de ${escapeHtml(r.tipoPax)} que já está na tela será substituído.</div>` : ""}
+      ${confs}
+      <ul class="muted small" style="margin:8px 0 0 18px">${r.infos.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul>
+      <div class="row" style="margin-top:10px"><button class="action primary" id="btnCopilotAplicar" type="button">Colar no FXO de ${escapeHtml(r.tipoPax)}</button></div>
+    </div>`;
+  }
   const linhas = r.campos.filter(c => !(c.valor === "" && !copilotValorTela(c.id))).map(c => {   // linha "zerar" so aparece se ha algo a zerar
     const atual = copilotValorTela(c.id);
     const muda = atual && atual !== c.valor;
@@ -6872,7 +7335,7 @@ function copilotHtmlResultado(r){
   return `<div style="margin-top:8px">
     <div><b>${escapeHtml(r.sistema.toUpperCase())}</b> • ${tipoTxt} • ${escapeHtml(r.moeda)} • linha ${escapeHtml(r.tipoPax)}</div>
     <table style="width:100%;margin-top:6px;border-collapse:collapse"><tr class="muted"><td>Campo</td><td>Lido</td><td>Hoje na tela</td></tr>${linhas}</table>
-    ${branco}${infos}
+    ${branco}${confs}${infos}
     <div class="row" style="margin-top:10px"><button class="action primary" id="btnCopilotAplicar" type="button">Aplicar nos campos</button></div>
   </div>`;
 }
@@ -6899,6 +7362,20 @@ function copilotHtmlConferencia(r){
 function copilotAplica(){
   const r = __copilotLeitura;
   if(!r || !r.ok) return;
+  if(r.sistema === "fxo"){
+    // Print de FXO: o texto transcrito entra na caixa do FXO e o leitor de FXO (regras fixas) faz o resto, como se fosse colado.
+    switchTab("tabInter");
+    setValuesMethod("INTER", "fxo");
+    const ta = document.getElementById("fxoBox_" + r.tipoPax);
+    const outFxo = document.getElementById("copilot_result");
+    if(!ta){ showToast("Não achei a caixa do FXO desta linha."); return; }
+    ta.value = r.textoFxo;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    if(ta.scrollIntoView) ta.scrollIntoView({ block: "center", behavior: "smooth" });
+    outFxo.innerHTML = `<div style="margin-top:8px"><b>Texto colado no FXO de ${escapeHtml(r.tipoPax)}.</b> O leitor de FXO preenche os valores; confira o status abaixo da caixa e compare com o print antes de gerar as saídas.</div>`;
+    showToast("FXO colado a partir do print. Confira antes de gerar.");
+    return;
+  }
   switchTab(r.tipo === "NAC" ? "tabNac" : "tabInter");
   // A caixa do Copilot so aparece no metodo "Print com Copilot": se a leitura e do outro modo, ele passa a ser o ativo.
   setValuesMethod(r.tipo === "NAC" ? "NAC" : "INTER", "print");
@@ -6978,6 +7455,141 @@ function copilotAplica(){
       if(antigo) antigo.remove();
       out.insertAdjacentHTML("beforeend", `<ul data-conf style="margin:6px 0 0 18px">${li}</ul>`);
     }
+  });
+})();
+// ----- UI: "Ler o print aqui" (OCR no navegador; so arquivos do proprio dominio; nenhuma rede de terceiros) -----
+// Fluxo: colar/arrastar/escolher o print -> ampliar em <canvas> (3x) -> Tesseract.js le as palavras -> 27-core-ocr-leitor monta o
+// MESMO JSON do Copilot -> vai para #copilot_json -> a previa (com as contas conferidas) aparece sozinha -> "Aplicar nos campos".
+// So funciona onde a pagina define window.RA_OCR_BASE (pasta com tesseract.min.js, worker.min.js, core/ e lang/). Sem ela (ex.: o
+// widget do Elementor) o bloco fica oculto e NADA e carregado: a versao do Elementor nao muda de comportamento.
+let __ocrWorker = null, __ocrCarregando = null, __ocrOcupado = false, __ocrThumbUrl = null;
+
+function ocrBase(){
+  const b = window.RA_OCR_BASE;
+  return b ? String(b).replace(/\/?$/, "/") : "";
+}
+function ocrMensagem(texto, aviso){
+  const el = document.getElementById("ocrStatus");
+  if(!el) return;
+  el.textContent = texto || "";
+  el.style.color = aviso ? "#b45309" : "";
+}
+function ocrCarregaScript(src){
+  return new Promise((ok, erro)=>{
+    if(window.Tesseract) return ok();
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = ()=> ok();
+    s.onerror = ()=> erro(new Error("Não consegui carregar os arquivos do OCR. Use o Copilot ou digite os valores."));
+    document.head.appendChild(s);
+  });
+}
+// o motor so e baixado na primeira leitura (cerca de 9 MB; depois o navegador guarda em cache)
+async function ocrWorker(){
+  if(__ocrWorker) return __ocrWorker;
+  if(!__ocrCarregando){
+    __ocrCarregando = (async ()=>{
+      const base = ocrBase();
+      ocrMensagem("Preparando o OCR (primeira vez baixa uns 9 MB; depois fica guardado)…");
+      await ocrCarregaScript(base + "tesseract.min.js");
+      // TODOS os caminhos sao locais: sem isso o Tesseract.js buscaria o motor e os idiomas em um CDN publico
+      const wk = await window.Tesseract.createWorker(["eng", "por"], 1, {
+        workerPath: base + "worker.min.js", corePath: base + "core", langPath: base + "lang", gzip: true, cacheMethod: "none",
+        logger: (m)=>{ if(m && m.status === "recognizing text") ocrMensagem(`Lendo o print… ${Math.round((m.progress || 0) * 100)}%`); }
+      });
+      await wk.setParameters({ preserve_interword_spaces: "1" });
+      return wk;
+    })();
+  }
+  try{ __ocrWorker = await __ocrCarregando; }
+  finally{ if(!__ocrWorker) __ocrCarregando = null; }
+  return __ocrWorker;
+}
+
+// escalas tentadas: ampliar 3x acerta as tabelas; o texto do FXO as vezes sai melhor sem ampliar (a conta decide)
+function ocrEscalasPara(largura, altura){
+  const e3 = (largura > 2000) ? 2 : 3;
+  const limite = 24e6;                                   // teto de pixels do canvas
+  const maior = (largura * e3) * (altura * e3) <= limite ? e3 : Math.max(1, Math.floor(Math.sqrt(limite / (largura * altura))));
+  return maior > 1 ? [maior, 1] : [1];
+}
+function ocrCanvas(bmp, escala){
+  return new Promise((ok, erro)=>{
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * escala); c.height = Math.round(bmp.height * escala);
+    const g = c.getContext("2d");
+    if(!g) return erro(new Error("O navegador não permitiu preparar a imagem."));
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    c.toBlob((b)=> b ? ok(b) : erro(new Error("Não consegui ampliar a imagem.")), "image/png");
+  });
+}
+
+// le o print (Blob) e devolve o resultado de ocrEscolhe; nao escreve nada na tela de valores
+async function ocrProcessa(blob){
+  const bmp = await createImageBitmap(blob);
+  const escalas = ocrEscalasPara(bmp.width, bmp.height);
+  const wk = await ocrWorker();
+  const tentativas = [];
+  for(let i = 0; i < escalas.length; i++){
+    const esc = escalas[i];
+    ocrMensagem(`Lendo o print… (tentativa ${i + 1} de ${escalas.length})`);
+    const img = esc === 1 ? blob : await ocrCanvas(bmp, esc);
+    const { data } = await wk.recognize(img, {}, { tsv: true });
+    tentativas.push({ escala: esc, tsv: data.tsv });
+    const parcial = ocrEscolhe(tentativas);
+    if(parcial.ok && parcial.leitura.conferencias.length >= 3) break;     // 3 contas fechando: nao precisa de outra tentativa
+  }
+  if(bmp.close) bmp.close();
+  return ocrEscolhe(tentativas);
+}
+
+async function ocrLerArquivo(blob){
+  if(__ocrOcupado) return;
+  if(!blob || !/^image\//.test(blob.type || "")){ ocrMensagem("Escolha um arquivo de imagem (PNG, JPG…).", true); return; }
+  __ocrOcupado = true;
+  try{
+    if(__ocrThumbUrl) URL.revokeObjectURL(__ocrThumbUrl);
+    __ocrThumbUrl = URL.createObjectURL(blob);
+    const th = document.getElementById("ocrThumb");
+    if(th){ th.src = __ocrThumbUrl; th.classList.remove("hidden"); }
+    const r = await ocrProcessa(blob);
+    if(!r.ok){
+      ocrMensagem("Não usei esta leitura: " + r.erro + " — Use o Copilot (abaixo) ou digite os valores.", true);
+      return;
+    }
+    const ta = document.getElementById("copilot_json");
+    ta.value = JSON.stringify(r.obj, null, 2);
+    ta.dispatchEvent(new Event("input", { bubbles: true }));          // a previa aparece sozinha
+    const contas = r.leitura.conferencias.length;
+    ocrMensagem(`Print lido (${r.sistema}${r.escala > 1 ? ", ampliado " + r.escala + "×" : ""}). ${contas ? contas + " conta(s) conferida(s). " : "Sem contas para conferir neste print. "}`
+      + "Compare a prévia abaixo com o print e clique em “Aplicar nos campos”." + (r.avisos.length ? " Atenção: " + r.avisos.join(" ") : ""), !contas || r.avisos.length > 0);
+  }catch(e){
+    ocrMensagem((e && e.message) ? e.message : "Não consegui ler o print.", true);
+  }finally{
+    __ocrOcupado = false;
+  }
+}
+
+(function ligaOcr(){
+  const box = document.getElementById("ocrBox");
+  if(!box || !ocrBase()) return;                                       // sem RA_OCR_BASE: bloco oculto, nada e carregado
+  box.classList.remove("hidden");
+  const drop = document.getElementById("ocrDrop"), file = document.getElementById("ocrFile");
+  drop.addEventListener("click", ()=> file.click());
+  drop.addEventListener("keydown", (e)=>{ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); file.click(); } });
+  file.addEventListener("change", ()=>{ if(file.files && file.files[0]) ocrLerArquivo(file.files[0]); file.value = ""; });
+  for(const ev of ["dragover", "dragenter"]) drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.style.background = "rgba(127,127,127,.12)"; });
+  for(const ev of ["dragleave", "drop"]) drop.addEventListener(ev, ()=>{ drop.style.background = ""; });
+  drop.addEventListener("drop", (e)=>{ e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if(f) ocrLerArquivo(f); });
+  // Ctrl+V com um print na area de transferencia (so quando a caixa esta visivel e o que veio e imagem; texto colado segue normal)
+  document.addEventListener("paste", (e)=>{
+    const cb = e.clipboardData;
+    if(!cb || !cb.files || !cb.files.length || !/^image\//.test(cb.files[0].type || "")) return;
+    const caixa = document.getElementById("copilotBox");
+    if(!caixa || caixa.classList.contains("hidden") || box.classList.contains("hidden")) return;
+    e.preventDefault();
+    ocrLerArquivo(cb.files[0]);
   });
 })();
 

@@ -12,6 +12,7 @@ shared/
   nav.css, nav.js      → barra de navegação, injetada nas duas cópias
   reemissao-tema.css   → alinha a paleta da reemissão à da cotação
   tema-seed.js         → deixa o tema claro como padrão da reemissão
+  ocr/                 → arquivos do OCR da reemissão (só versão de testes; ver "OCR" abaixo)
 cotacao/               → Calculadora de Cotação INTER  (cópia + nav)
 reemissao/             → Calculadora de Reemissão FXO  (cópia + nav + tema)
 sync.cjs               → re-sincroniza as cópias e prova que nada mais mudou
@@ -23,8 +24,9 @@ sync.cjs               → re-sincroniza as cópias e prova que nada mais mudou
 
 As duas calculadoras aqui são cópias das fontes onde elas são desenvolvidas. **Nenhuma
 linha de código dos apps é alterada**: cada cópia é a fonte mais um punhado de linhas
-injetadas (2 na cotação, 4 na reemissão), todas marcadas com o comentário
-`consolidacao:inject`, que apenas carregam a nav e o tema. Cada app segue sendo um
+injetadas (2 na cotação, 5 na reemissão), todas marcadas com o comentário
+`consolidacao:inject`, que apenas carregam a nav, o tema e (só na reemissão) o endereço
+do OCR. Cada app segue sendo um
 documento HTML separado, o que já isola CSS e JS por completo.
 
 O `sync.cjs` **prova** isso a cada execução: ele remove as linhas marcadas e compara o
@@ -117,3 +119,20 @@ Se isso for feito, o redirecionamento **tem de ser via JavaScript**
 (`location.replace(novaURL + location.hash)`), nunca `<meta refresh>`: o app de
 reemissão tem deep-link por fragmento (`#CRR1-...`, lido no carregamento para reabrir um
 cálculo salvo) e `<meta refresh>` não preserva o fragmento.
+
+## OCR da reemissão (só nesta versão de testes)
+
+A Calculadora de Reemissão consegue **ler o print da tela dentro do navegador** (Tesseract.js, sem Copilot,
+sem servidor, sem enviar a imagem para lugar nenhum). Ele só liga onde a página define `window.RA_OCR_BASE`:
+
+- **Aqui**, o `sync.cjs` injeta uma linha (`consolidacao:inject`) com `window.RA_OCR_BASE = "../shared/ocr/"`.
+- **Em qualquer outro lugar** (ex.: a cópia colada no widget do Elementor) essa linha não existe: o bloco do OCR
+  fica oculto e nada é carregado. O app se comporta exatamente como antes.
+
+`shared/ocr/` é gerado por `ferramentas/ocr_pacote.cjs` (repo da reemissão) e **não deve ser editado à mão**:
+`SHA256SUMS.txt` lista a impressão digital de cada arquivo, e o `.gitattributes` impede a normalização de fim de
+linha. Versões fixadas: tesseract.js 7.0.0, tesseract.js-core 7.0.0, tessdata eng/por 4.0.0_best_int (Apache-2.0,
+ver `shared/ocr/LICENSES.md`). O navegador baixa só um núcleo + os dois idiomas (~9 MB) na primeira leitura.
+
+Para checar se o OCR roda num endereço, abra `shared/ocr/ocr-diagnostico.html` **servido por http(s)**
+(não vale abrir o arquivo com duplo clique): ela lista, item por item, o que carregou e o que falhou.

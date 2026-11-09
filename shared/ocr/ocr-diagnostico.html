@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>Diagnóstico do OCR — Calculadora de Reemissão</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#1f1a33}
+  h1{font-size:20px} .ok{color:#0a7d33;font-weight:700} .erro{color:#b42318;font-weight:700} .aviso{color:#8a5a06;font-weight:700}
+  li{margin:6px 0} pre{background:#f5f2fb;padding:10px;border-radius:8px;white-space:pre-wrap;font-size:12px} small{color:#5f5a78}
+</style>
+</head>
+<body>
+<h1>Diagnóstico do OCR</h1>
+<p><small>Esta página só verifica se o navegador consegue carregar e rodar os arquivos do OCR que estão <b>nesta mesma pasta</b>. Ela não envia nada para fora e não usa nenhuma imagem sua: lê uma imagem de teste desenhada aqui mesmo.</small></p>
+<ul id="lista"></ul>
+<h2 style="font-size:16px">Resultado</h2>
+<pre id="resultado">aguardando…</pre>
+<script>
+(function(){
+  var base = location.href.replace(/[^\/]*$/, "");           // a pasta desta pagina
+  var lista = document.getElementById("lista"), saida = document.getElementById("resultado");
+  var r = { base: base, passos: [], ok: false };
+  function passo(nome, ok, detalhe){
+    r.passos.push({ nome: nome, ok: ok, detalhe: detalhe || "" });
+    var li = document.createElement("li");
+    li.innerHTML = '<span class="' + (ok ? "ok" : "erro") + '">' + (ok ? "OK" : "FALHOU") + '</span> — ' + nome + (detalhe ? ' <small>(' + detalhe + ')</small>' : "");
+    lista.appendChild(li);
+  }
+  function fim(){
+    r.ok = r.passos.length > 0 && r.passos.every(function(p){ return p.ok; });
+    saida.textContent = (r.ok ? "TUDO CERTO: o OCR roda neste endereço." : "HÁ FALHAS: veja os itens acima e mostre esta tela para quem cuida do site.") + "\n\n" + JSON.stringify(r, null, 2);
+    document.title = (r.ok ? "OCR-OK" : "OCR-FALHOU") + " — Diagnóstico do OCR";
+    window.__diag = r;
+  }
+  function carrega(src){
+    return new Promise(function(ok, erro){ var s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = function(){ erro(new Error("não carregou " + src)); }; document.head.appendChild(s); });
+  }
+  function desenhaTeste(){
+    var c = document.createElement("canvas"); c.width = 900; c.height = 260;
+    var g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.fillStyle = "#000";
+    g.font = "44px Arial, Helvetica, sans-serif";
+    g.fillText("Total a pagar BRL 1.234,56", 30, 90);
+    g.fillText("Diferenca USD 987.65", 30, 180);
+    return c;
+  }
+  (async function(){
+    try{
+      var wasm = typeof WebAssembly === "object";
+      passo("WebAssembly disponível no navegador", wasm);
+      if(!wasm) return fim();
+      try{
+        var mod = new Uint8Array([0,97,115,109,1,0,0,0]);
+        passo("WebAssembly executa módulos", WebAssembly.validate(mod));
+      }catch(e){ passo("WebAssembly executa módulos", false, e.message); }
+      await carrega(base + "tesseract.min.js"); passo("tesseract.min.js carregou", !!window.Tesseract);
+      var inicio = Date.now();
+      var worker = await window.Tesseract.createWorker(["eng", "por"], 1, {
+        workerPath: base + "worker.min.js", corePath: base + "core", langPath: base + "lang", gzip: true, cacheMethod: "none", logger: function(){}
+      });
+      passo("motor (core) e idiomas eng + por carregaram desta pasta", true, Math.round((Date.now() - inicio) / 100) / 10 + " s");
+      var res = await worker.recognize(desenhaTeste(), {}, { text: true });
+      var t = (res.data.text || "").replace(/\s+/g, " ");
+      passo("leitura de teste: encontrou 1.234,56", t.indexOf("1.234,56") >= 0, t.slice(0, 80));
+      passo("leitura de teste: encontrou 987.65", t.indexOf("987.65") >= 0);
+      await worker.terminate();
+    }catch(e){
+      passo("execução", false, e && e.message ? e.message : String(e));
+    }
+    fim();
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+tesseract.js 7.0.0
+tesseract.js-core 7.0.0
+tessdata: eng e por, 4.0.0_best_int
+Gerado por ferramentas/ocr_pacote.cjs (Calculadora de Reemissao). Nao edite os arquivos desta pasta: gere de novo.

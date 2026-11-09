@@ -140,6 +140,10 @@ const L_NAV_CSS = `<link rel="stylesheet" href="../shared/nav.css" /><!-- ${MARC
 const L_NAV_JS = `<script src="../shared/nav.js"></script><!-- ${MARCA} -->`;
 const L_TEMA_CSS = `<link rel="stylesheet" href="../shared/reemissao-tema.css" /><!-- ${MARCA} -->`;
 const L_TEMA_SEED = `<script src="../shared/tema-seed.js"></script><!-- ${MARCA} -->`;
+// Liga o OCR da reemissao SO nesta versao de testes: o app le window.RA_OCR_BASE (pasta com os arquivos do OCR,
+// em shared/ocr/). Sem essa linha (ex.: a copia colada no widget do Elementor) o bloco do OCR fica oculto e
+// nada e carregado. Vai no <head> para existir antes do script do app, que fica no fim do <body>.
+const L_OCR_BASE = `<script>window.RA_OCR_BASE = "../shared/ocr/";</script><!-- ${MARCA} -->`;
 
 for (const f of [
   path.join(SRC_COTACAO, "index.html"),
@@ -172,7 +176,7 @@ copiaComInjecao(
 copiaComInjecao(
   SRC_REEMISSAO,
   path.join(DEST, "reemissao/index.html"),
-  [L_NAV_CSS, L_TEMA_CSS, L_TEMA_SEED],
+  [L_NAV_CSS, L_TEMA_CSS, L_TEMA_SEED, L_OCR_BASE],
   [L_NAV_JS]
 );
 
