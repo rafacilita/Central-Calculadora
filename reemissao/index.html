@@ -1264,6 +1264,12 @@ h1{ margin:0 0 6px; font-size: 20px; font-weight: 800; letter-spacing:.2px; }
             <input type="file" id="ocrFile" accept="image/*" class="hidden">
             <div id="ocrStatus" class="muted small" role="status" aria-live="polite" style="margin-top:6px"></div>
             <img id="ocrThumb" alt="Print lido" class="hidden" style="margin-top:6px; max-width:260px; max-height:160px; border:1px solid rgba(127,127,127,.4); border-radius:6px">
+            <details id="ocrDiag" class="hidden" style="margin-top:6px">
+              <summary class="muted small" style="cursor:pointer">Ver como o OCR leu (diagnóstico)</summary>
+              <ul id="ocrDiagResumo" class="muted small" style="margin:6px 0 0 18px"></ul>
+              <div class="row" style="margin-top:6px"><button class="action" id="btnOcrDiagCopiar" type="button">Copiar a leitura sem nomes/bilhetes</button></div>
+              <div class="muted small" style="margin-top:4px">Cola o texto que o OCR leu (não a imagem), com números longos e o cabeçalho do passageiro trocados por XXXX. <b>Revise antes de enviar a alguém.</b></div>
+            </details>
             <div class="muted small" style="margin-top:6px">Confira os valores da prévia abaixo com o print antes de aplicar. Na dúvida, o campo fica em branco.</div>
           </div>
           <div id="copilotPaxSlot"></div>
@@ -3204,25 +3210,57 @@ function leituraDeOcr(tsv){
   return { ok: true, sistema: sis, obj, avisos };
 }
 
-// Varias tentativas (escalas diferentes da imagem): fica a leitura que PASSA nas contas e tem mais conferencias / menos campos em branco.
-// `tentativas` = [{ escala, tsv }]. Ex.: 3x acerta as tabelas; o texto monoespacado do FXO as vezes sai melhor sem ampliar.
-// Devolve { ok:true, escala, sistema, obj, avisos, leitura, tentativas:[resumo] } ou { ok:false, erro, tentativas:[resumo] }.
+// Varias tentativas (a MESMA imagem preparada de jeitos diferentes): fica a leitura que PASSA nas contas e tem mais conferencias.
+// `tentativas` = [{ escala, rotulo, tsv }]. Nenhum preparo serve a todas as telas (medido nos prints reais): ampliar com pixels
+// nitidos acerta o Farelogix e o Sabre, a ampliacao suave acerta o E-Latam, e o texto monoespacado do FXO as vezes sai melhor sem
+// ampliar. Por isso o app tenta variantes e as CONTAS decidem.
+// Uma leitura SEM nenhuma conta conferida e "incompleta" (campos demais em branco) e NAO e aceita, exceto no NDC Amadeus, que nao tem
+// colunas para cruzar (o total e conferido na previa).
+// Devolve { ok:true, escala, rotulo, sistema, obj, avisos, leitura, tentativas:[resumo] } ou { ok:false, erro, tentativas:[resumo] }.
 function ocrEscolhe(tentativas){
   const resumo = [];
-  let melhor = null, ultimoErro = null;
+  let melhor = null, ultimoErro = null, incompleta = false;
   for(const t of tentativas){
+    const rotulo = t.rotulo || (t.escala + "x");
     const r = leituraDeOcr(t.tsv);
-    if(!r.ok){ resumo.push({ escala: t.escala, ok: false, motivo: r.erro }); ultimoErro = ultimoErro || r.erro; continue; }
+    if(!r.ok){ resumo.push({ escala: t.escala, rotulo, ok: false, motivo: r.erro }); ultimoErro = ultimoErro || r.erro; continue; }
     const leitura = lerLeituraCopilot(JSON.stringify(r.obj), "ADT");
-    if(!leitura.ok){ resumo.push({ escala: t.escala, ok: false, motivo: leitura.erro }); ultimoErro = leitura.erro; continue; }
+    if(!leitura.ok){ resumo.push({ escala: t.escala, rotulo, ok: false, motivo: leitura.erro }); ultimoErro = leitura.erro; continue; }
     const confs = (leitura.conferencias || []).length;
     const brancos = (leitura.emBranco || []).length + (r.obj.campos_nao_lidos || []).length;
+    if(!confs && r.sistema !== "ndc-amadeus"){
+      resumo.push({ escala: t.escala, rotulo, ok: false, incompleta: true, motivo: "leitura incompleta: nenhuma conta pôde ser conferida (valores demais em branco)" });
+      incompleta = true;
+      continue;
+    }
     const pontos = confs * 10 - brancos;
-    resumo.push({ escala: t.escala, ok: true, conferencias: confs, brancos, pontos });
-    if(!melhor || pontos > melhor.pontos) melhor = { escala: t.escala, sistema: r.sistema, obj: r.obj, avisos: r.avisos, leitura, pontos };
+    resumo.push({ escala: t.escala, rotulo, ok: true, conferencias: confs, brancos, pontos });
+    if(!melhor || pontos > melhor.pontos) melhor = { escala: t.escala, rotulo, sistema: r.sistema, obj: r.obj, avisos: r.avisos, leitura, pontos };
   }
-  if(!melhor) return { ok: false, erro: ultimoErro || "O OCR não conseguiu ler este print.", tentativas: resumo };
-  return { ok: true, escala: melhor.escala, sistema: melhor.sistema, obj: melhor.obj, avisos: melhor.avisos, leitura: melhor.leitura, tentativas: resumo };
+  if(!melhor){
+    const erro = incompleta
+      ? "O OCR leu só parte do print (valores demais em branco, sem contas para conferir). Tente um print mais nítido, inteiro e em zoom 100%, ou use o Copilot."
+      : (ultimoErro || "O OCR não conseguiu ler este print.");
+    return { ok: false, erro, tentativas: resumo };
+  }
+  return { ok: true, escala: melhor.escala, rotulo: melhor.rotulo, sistema: melhor.sistema, obj: melhor.obj, avisos: melhor.avisos, leitura: melhor.leitura, tentativas: resumo };
+}
+
+// Tira dados pessoais de uma tabela do OCR (mesmas regras de ferramentas/ocr_sanitiza_tsv.cjs) para ela poder ser enviada para diagnostico:
+// numeros com 9+ digitos (bilhete) e, no Farelogix, tudo acima de "Calculo da troca" (nome, PNR). NAO e garantia: o usuario confere antes de enviar.
+function ocrSanitizaTsv(tsv){
+  const linhas = String(tsv || "").split(/\r?\n/).map(l => l.split("\t"));
+  let limite = null;
+  for(const c of linhas){
+    if(c[0] === "5" && c.length >= 12 && ocrNorm(c.slice(11).join("\t")) === "troca"){ limite = Number(c[7]) - 4; break; }
+  }
+  return linhas.map(c => {
+    if(c[0] !== "5" || c.length < 12) return c.join("\t");
+    const texto = c.slice(11).join("\t");
+    if(texto.replace(/\D/g, "").length >= 9) c[11] = "XXXXXXXXX";
+    else if(limite !== null && Number(c[7]) < limite) c[11] = "XXXX";
+    return c.join("\t");
+  }).join("\n");
 }
     // ----- core: calculo de reemissao NAC/INTER (puro, sem DOM) -----
     // Recebem os dados ja lidos do formulario (ver readNacInputs/readInterInputs,
@@ -7511,19 +7549,29 @@ async function ocrWorker(){
 }
 
 // escalas tentadas: ampliar 3x acerta as tabelas; o texto do FXO as vezes sai melhor sem ampliar (a conta decide)
+// Variantes tentadas, em ordem. Nenhum preparo serve a todas as telas (medido com prints reais): ampliar com pixels NITIDOS acerta o
+// Farelogix e o Sabre; ampliar com SUAVIZACAO acerta o E-Latam (e, no Farelogix, a suavizacao do canvas faz o OCR nem reconhecer a tela);
+// o texto do FXO as vezes sai melhor sem ampliar. As contas decidem qual leitura vale (ocrEscolhe).
 function ocrEscalasPara(largura, altura){
   const e3 = (largura > 2000) ? 2 : 3;
   const limite = 24e6;                                   // teto de pixels do canvas
-  const maior = (largura * e3) * (altura * e3) <= limite ? e3 : Math.max(1, Math.floor(Math.sqrt(limite / (largura * altura))));
-  return maior > 1 ? [maior, 1] : [1];
+  const e = (largura * e3) * (altura * e3) <= limite ? e3 : Math.max(1, Math.floor(Math.sqrt(limite / (largura * altura))));
+  const v = [];
+  if(e > 1){
+    v.push({ escala: e, suave: false, rotulo: `ampliado ${e}× nítido` });
+    v.push({ escala: e, suave: true, rotulo: `ampliado ${e}× suave` });
+  }
+  v.push({ escala: 1, suave: false, rotulo: "original" });
+  return v;
 }
-function ocrCanvas(bmp, escala){
+function ocrCanvas(bmp, escala, suave){
   return new Promise((ok, erro)=>{
     const c = document.createElement("canvas");
     c.width = Math.round(bmp.width * escala); c.height = Math.round(bmp.height * escala);
     const g = c.getContext("2d");
     if(!g) return erro(new Error("O navegador não permitiu preparar a imagem."));
-    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+    g.imageSmoothingEnabled = !!suave;
+    if(suave) g.imageSmoothingQuality = "high";
     g.drawImage(bmp, 0, 0, c.width, c.height);
     c.toBlob((b)=> b ? ok(b) : erro(new Error("Não consegui ampliar a imagem.")), "image/png");
   });
@@ -7532,20 +7580,32 @@ function ocrCanvas(bmp, escala){
 // le o print (Blob) e devolve o resultado de ocrEscolhe; nao escreve nada na tela de valores
 async function ocrProcessa(blob){
   const bmp = await createImageBitmap(blob);
-  const escalas = ocrEscalasPara(bmp.width, bmp.height);
+  const variantes = ocrEscalasPara(bmp.width, bmp.height);
   const wk = await ocrWorker();
   const tentativas = [];
-  for(let i = 0; i < escalas.length; i++){
-    const esc = escalas[i];
-    ocrMensagem(`Lendo o print… (tentativa ${i + 1} de ${escalas.length})`);
-    const img = esc === 1 ? blob : await ocrCanvas(bmp, esc);
+  for(let i = 0; i < variantes.length; i++){
+    const v = variantes[i];
+    ocrMensagem(`Lendo o print… (tentativa ${i + 1} de ${variantes.length}: ${v.rotulo})`);
+    const img = v.escala === 1 ? blob : await ocrCanvas(bmp, v.escala, v.suave);
     const { data } = await wk.recognize(img, {}, { tsv: true });
-    tentativas.push({ escala: esc, tsv: data.tsv });
+    tentativas.push({ escala: v.escala, rotulo: v.rotulo, tsv: data.tsv });
     const parcial = ocrEscolhe(tentativas);
     if(parcial.ok && parcial.leitura.conferencias.length >= 3) break;     // 3 contas fechando: nao precisa de outra tentativa
   }
   if(bmp.close) bmp.close();
-  return ocrEscolhe(tentativas);
+  const r = ocrEscolhe(tentativas);
+  r.brutas = tentativas;                                                  // so para o diagnostico (ocrMostraDiag)
+  return r;
+}
+
+// diagnostico: o que cada tentativa deu + a leitura SEM nomes/bilhetes para copiar e enviar (a tela do usuario nunca sai do navegador sozinha)
+let __ocrDiagTexto = "";
+function ocrMostraDiag(r){
+  const det = document.getElementById("ocrDiag"), res = document.getElementById("ocrDiagResumo");
+  if(!det || !res) return;
+  res.innerHTML = (r.tentativas || []).map(t => `<li><b>${escapeHtml(t.rotulo)}</b>: ${t.ok ? t.conferencias + " conta(s) conferida(s), " + t.brancos + " em branco" : escapeHtml(t.motivo || "recusada")}</li>`).join("");
+  __ocrDiagTexto = (r.brutas || []).map(t => "### " + t.rotulo + "\n" + ocrSanitizaTsv(t.tsv)).join("\n\n");
+  det.classList.remove("hidden");
 }
 
 async function ocrLerArquivo(blob){
@@ -7558,15 +7618,16 @@ async function ocrLerArquivo(blob){
     const th = document.getElementById("ocrThumb");
     if(th){ th.src = __ocrThumbUrl; th.classList.remove("hidden"); }
     const r = await ocrProcessa(blob);
+    ocrMostraDiag(r);
     if(!r.ok){
-      ocrMensagem("Não usei esta leitura: " + r.erro + " — Use o Copilot (abaixo) ou digite os valores.", true);
+      ocrMensagem("Não usei esta leitura: " + r.erro + " — Use o Copilot (abaixo) ou digite os valores. Em “Ver como o OCR leu” há o detalhe de cada tentativa.", true);
       return;
     }
     const ta = document.getElementById("copilot_json");
     ta.value = JSON.stringify(r.obj, null, 2);
     ta.dispatchEvent(new Event("input", { bubbles: true }));          // a previa aparece sozinha
     const contas = r.leitura.conferencias.length;
-    ocrMensagem(`Print lido (${r.sistema}${r.escala > 1 ? ", ampliado " + r.escala + "×" : ""}). ${contas ? contas + " conta(s) conferida(s). " : "Sem contas para conferir neste print. "}`
+    ocrMensagem(`Print lido (${r.sistema}, ${r.rotulo}). ${contas ? contas + " conta(s) conferida(s). " : "Sem contas para conferir neste print. "}`
       + "Compare a prévia abaixo com o print e clique em “Aplicar nos campos”." + (r.avisos.length ? " Atenção: " + r.avisos.join(" ") : ""), !contas || r.avisos.length > 0);
   }catch(e){
     ocrMensagem((e && e.message) ? e.message : "Não consegui ler o print.", true);
@@ -7595,6 +7656,11 @@ async function ocrLerArquivo(blob){
     const s = document.getElementById("copilotAltResumo"); if(s){ s.style.cursor = "pointer"; s.style.fontSize = "13px"; }
   }
   const drop = document.getElementById("ocrDrop"), file = document.getElementById("ocrFile");
+  const bd = document.getElementById("btnOcrDiagCopiar");
+  if(bd) bd.addEventListener("click", async ()=>{
+    try{ await navigator.clipboard.writeText(__ocrDiagTexto); showToast("Leitura do OCR copiada (sem nomes/bilhetes). Revise antes de enviar."); }
+    catch(e){ showToast("Não deu pra copiar automático. Libere a área de transferência do navegador."); }
+  });
   drop.addEventListener("click", ()=> file.click());
   drop.addEventListener("keydown", (e)=>{ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); file.click(); } });
   file.addEventListener("change", ()=>{ if(file.files && file.files[0]) ocrLerArquivo(file.files[0]); file.value = ""; });
