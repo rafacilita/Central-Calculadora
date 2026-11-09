@@ -13,3 +13,7 @@
 
 *.png binary
 *.jpg binary
+
+# Arquivos do OCR (shared/ocr): exatamente como saem de ferramentas/ocr_pacote.cjs. Nada de normalizar fim de
+# linha: os cores .wasm.js tem ~4 MB e SHA256SUMS.txt so confere se os bytes forem identicos.
+shared/ocr/** -text
