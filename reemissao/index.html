@@ -3058,9 +3058,16 @@ const ocrNA = (L) => L.words.some(w => /^n\/?a$/i.test(w.t.replace(/[^A-Za-z/]/g
 function ocrLeELatam(linhas, largura, avisos){
   const o = ocrVazio(); o.sistema = "e-latam";
   const av = (m) => avisos.push(m);
-  const base = linhas.find(l => ocrComeca(l, "base", 0) && ocrMoedaNaLinha(l));
+  // Internacional: "BASE USD 2937.00 ..." (a moeda esta na propria linha). Nacional: so "BASE 1121.92 ..." e o "BRL BRL" fica na linha de
+  // cima (logo abaixo de "Trocar / Nova Quantia"). Procura a moeda na linha BASE e, se nao houver, nas duas linhas imediatamente acima.
+  let base = null;
+  linhas.forEach((l, i) => {
+    if(base || !ocrComeca(l, "base", 0)) return;
+    let m = ocrMoedaNaLinha(l);
+    for(let k = 1; !m && k <= 2 && i - k >= 0; k++) m = ocrMoedaNaLinha(linhas[i - k]);
+    if(m){ base = l; o.moeda_emissao = m; }
+  });
   if(!base) { avisos.push("Linha BASE não encontrada."); return ocrFecha(o, avisos); }
-  o.moeda_emissao = ocrMoedaNaLinha(base);
   const ref = ocrNumeros(base, av);
   if(ref.length < 3){ avisos.push("A linha BASE não trouxe os 3 valores (Trocar / Nova Quantia / Moeda de Reemissão) com segurança; nada foi lido das colunas."); return ocrFecha(o, avisos); }
   const centros = ref.slice(0, 3).map(n => n.cx);
@@ -3094,28 +3101,48 @@ function ocrLeELatam(linhas, largura, avisos){
 }
 
 // ---------- NDC Farelogix ----------
+// Duas versoes da tela: a de sempre (tarifa-base em USD + cambio + "diferenca na moeda de venda" em BRL) e a "equivalente" (ex.: NDC Copa),
+// toda em BRL: "Nova tarifa equivalente" / "Passagem original na tarifa equivalente" / "Diferenca equivalente de tarifa", sem cambio.
 function ocrLeFarelogix(linhas, largura, avisos){
-  const o = ocrVazio(); o.sistema = "ndc-farelogix"; o.tipo = "INTER"; o.moeda_emissao = "USD"; o.multa_moeda = "BRL";
+  const equiv = linhas.some(l => ocrComeca(l, "nova tarifa equivalente", 3));
+  const o = ocrVazio(); o.sistema = "ndc-farelogix"; o.tipo = "INTER"; o.moeda_emissao = equiv ? "BRL" : "USD"; o.multa_moeda = "BRL";
   const av = (m) => avisos.push(m);
-  // primeiro valor do rotulo, a direita dele (as colunas da direita pertencem ao outro painel da tela)
-  const valor = (chave, tol) => {
-    const l = linhas.find(x => ocrComeca(x, chave, tol));
-    if(!l) { avisos.push(`Linha "${chave}" não encontrada.`); return null; }
-    const n = ocrNumeros(l, av);
+  // primeiro valor do rotulo, a direita dele (as colunas da direita pertencem ao outro painel da tela).
+  // quebra = true: o rotulo pode quebrar em duas linhas ("Passagem original na tarifa" / "equivalente  -1957.11"); entao o valor esta na linha de baixo.
+  const valor = (chave, tol, quebra) => {
+    const i = linhas.findIndex(x => ocrComeca(x, chave, tol));
+    if(i < 0) { avisos.push(`Linha "${chave}" não encontrada.`); return null; }
+    let n = ocrNumeros(linhas[i], av);
+    if(!n.length && quebra && linhas[i + 1] && linhas[i + 1].cy - linhas[i].cy <= linhas[i].h * 2.5) n = ocrNumeros(linhas[i + 1], av);
     return n.length ? n[0].v : null;
   };
-  o.tarifa_nova = valor("tarifa-base nova", 2);
-  const orig = valor("passagem original na tarifa-base", 3);
-  o.tarifa_antiga = orig === null ? null : Math.abs(orig);
-  o.dif_tarifa = valor("diferenca da tarifa-base", 3);
-  o.dif_tarifa_brl = valor("diferenca na moeda de venda", 3);
+  if(equiv){
+    o.tarifa_nova = valor("nova tarifa equivalente", 3);
+    const orig = valor("passagem original na tarifa", 3, true);
+    o.tarifa_antiga = orig === null ? null : Math.abs(orig);
+    o.dif_tarifa = valor("diferenca equivalente de tarifa", 3);
+    o.dif_tarifa_brl = o.dif_tarifa;                  // ja esta em BRL: a diferenca na moeda de venda e a propria diferenca
+  }else{
+    o.tarifa_nova = valor("tarifa-base nova", 2);
+    const orig = valor("passagem original na tarifa-base", 3);
+    o.tarifa_antiga = orig === null ? null : Math.abs(orig);
+    o.dif_tarifa = valor("diferenca da tarifa-base", 3);
+    o.dif_tarifa_brl = valor("diferenca na moeda de venda", 3);
+  }
   o.dif_taxas = valor("impostos de coleta de acrescimo", 3);
   o.penalidades_fiscais = valor("penalidades fiscais a pagar", 3);
   o.multa = valor("multa", 1);
   const cl = linhas.find(l => ocrComeca(l, "taxa de conversao de moeda", 3));
   if(cl){ for(const w of cl.words){ const c = ocrCambio(w.t); if(c !== null && w.conf >= OCR_CONF_MIN){ o.cambio = c; break; } } }
   const tot = linhas.find(l => ocrComeca(l, "coleta de acrescimo", 2) || ocrComeca(l, "total forfeit", 2));
-  if(tot){ const n = ocrNumeros(tot, av); if(n.length){ o.total_a_cobrar = n[n.length - 1].v; o.total_moeda = ocrMoedaNaLinha(tot) || "BRL"; } }
+  if(tot){
+    // o numero logo DEPOIS da moeda ("BRL 15308.61"): a linha pode trazer tambem, do outro painel, "Nenhuma comissao ... 0.00"
+    const n = ocrNumeros(tot, av);
+    const wm = tot.words.find(w => OCR_MOEDAS.includes(w.t.toUpperCase().replace(/[^A-Z]/g, "")));
+    const depois = wm ? n.filter(x => x.cx > wm.cx) : [];
+    const escolhido = depois.length ? depois[0] : n[n.length - 1];
+    if(escolhido){ o.total_a_cobrar = escolhido.v; o.total_moeda = ocrMoedaNaLinha(tot) || "BRL"; }
+  }
   const res = linhas.find(l => ocrComeca(l, "impostos residuais", 3));
   if(res){ const n = ocrNumeros(res); if(n.length && n[0].v !== 0) avisos.push(`Impostos residuais: ${n[0].v.toFixed(2)} (só informativo).`); }
   return ocrFecha(o, avisos);
@@ -3186,6 +3213,7 @@ function ocrDetectaSistema(linhas){
   if(tem("old base fare", 1) || tem("fare balance", 1) || tem("total add coll", 1)) return "fxo";
   if(tem("nova quantia", 1) || (tem("trocar", 0) && tem("reemissao", 2) && linhas.some(l => ocrComeca(l, "base", 0)))) return "e-latam";
   if(tem("tarifa-base nova", 2) && tem("passagem original", 2)) return "ndc-farelogix";
+  if(tem("nova tarifa equivalente", 3) && tem("passagem original", 2)) return "ndc-farelogix";
   if(tem("calculo da troca", 2) && tem("diferenca da tarifa-base", 3)) return "ndc-farelogix";
   if(tem("diferenca de preco", 2) && tem("multas", 1)) return "ndc-amadeus";
   if(tem("total das taxas", 2) && (tem("comparacao do bilhete", 3) || tem("tarifa base", 2))) return "sabre-comparacao";
@@ -3251,8 +3279,12 @@ function ocrEscolhe(tentativas){
 function ocrSanitizaTsv(tsv){
   const linhas = String(tsv || "").split(/\r?\n/).map(l => l.split("\t"));
   let limite = null;
+  let prev = "";     // "troca" so vale depois de "da" ("Calculo da troca"); "Troca de passagem" no titulo da janela nao e o limite
   for(const c of linhas){
-    if(c[0] === "5" && c.length >= 12 && ocrNorm(c.slice(11).join("\t")) === "troca"){ limite = Number(c[7]) - 4; break; }
+    if(c[0] !== "5" || c.length < 12) continue;
+    const t = ocrNorm(c.slice(11).join("\t"));
+    if(t === "troca" && prev === "da"){ limite = Number(c[7]) - 4; break; }
+    prev = t;
   }
   return linhas.map(c => {
     if(c[0] !== "5" || c.length < 12) return c.join("\t");
