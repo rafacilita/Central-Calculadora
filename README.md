@@ -61,9 +61,15 @@ O app de cotação precisa dos dois assets ao lado — as referências são rela
 
 ```bash
 node sync.cjs
+# ou, apontando para clones limpos (sem editar o script):
+node sync.cjs --cotacao C:/Users/mgfv6541/repos/cotacao-crc --reemissao C:/Users/mgfv6541/repos/reemissao-master
 ```
 
 Depois: `git status` para ver o que mudou, e commit + push.
+
+O `sync.cjs` só roda se cada fonte estiver na branch publicada (`main` / `master`), sem alteração
+não commitada **e com o commit idêntico ao do GitHub** (faz um `git fetch` de leitura e compara com
+`origin/<branch>`). Assim nada que não passou por PR e merge vai ao ar.
 
 É Node, e não shell, de propósito: no Windows o `grep`/`sed`/`awk` do Git Bash trabalham
 em modo texto e reimprimem CRLF como LF. As fontes têm CRLF (4.275 `\r` na cotação,

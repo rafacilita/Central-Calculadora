@@ -23,8 +23,11 @@ const { execFileSync } = require("node:child_process");
 // As duas fontes moram juntas em "Central Calculadora" desde 23/10/2026 (antes:
 // "Calc Cotação/rextur-cotacao" e "Calculadora Reemissão").
 const CENTRAL = "C:/Users/mgfv6541/OneDrive - CVC Brasil Operadora e Agencia de Viagens S.A/Documentos/Central Calculadora";
-const REPO_COTACAO = path.join(CENTRAL, "cotacao");
-const REPO_REEMISSAO = path.join(CENTRAL, "reemissao");
+// Caminhos das fontes: por padrao os do OneDrive; use os worktrees limpos assim (sem editar este arquivo):
+//   node sync.cjs --cotacao C:/Users/mgfv6541/repos/cotacao-crc --reemissao C:/Users/mgfv6541/repos/reemissao-master
+function opcao(nome) { const i = process.argv.indexOf("--" + nome); return i >= 0 && process.argv[i + 1] ? path.resolve(process.argv[i + 1]) : null; }
+const REPO_COTACAO = opcao("cotacao") || path.join(CENTRAL, "cotacao");
+const REPO_REEMISSAO = opcao("reemissao") || path.join(CENTRAL, "reemissao");
 const SRC_COTACAO = REPO_COTACAO;
 const SRC_REEMISSAO = path.join(REPO_REEMISSAO, "dev-fxo/index-dev.html");
 const DEST = __dirname;
@@ -47,6 +50,15 @@ function exigeFontePublicada(repo, branch, arquivos) {
   }
   const sujos = git("status", "--porcelain", "--", ...arquivos);
   if (sujos) fail(`fonte com alteracao nao commitada em ${repo}:\n${sujos}`);
+  // O commit local tem de ser EXATAMENTE o que esta no GitHub (o que passou por PR e merge). Senao um commit feito so aqui,
+  // sem revisao, iria ao ar. So le a rede (git fetch); nao envia nada.
+  try { git("fetch", "--quiet", "origin", branch); }
+  catch (e) { fail(`nao consegui consultar o GitHub (git fetch origin ${branch}) em ${repo}; sem isso nao da para provar que a fonte e a publicada.`); }
+  const local = git("rev-parse", "HEAD"), remoto = git("rev-parse", `origin/${branch}`);
+  if (local !== remoto) {
+    fail(`${repo}: o commit local (${local.slice(0, 7)}) difere de origin/${branch} (${remoto.slice(0, 7)}).\n` +
+      `       So publica o que ja passou por PR e merge no GitHub. Atualize com: git -C "${repo}" merge --ff-only origin/${branch}`);
+  }
 }
 
 function rel(p) {
